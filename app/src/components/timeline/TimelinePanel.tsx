@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState } from 'react';
+import { useRef, useCallback, useState, useEffect } from 'react';
 import { useProjectStore } from '../../store';
 import WaveformTrack from './WaveformTrack';
 import ActorTrack from './ActorTrack';
@@ -7,8 +7,23 @@ import { INTERPOLATION_OPTIONS, type InterpolationType } from '../../types';
 
 export default function TimelinePanel() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const timeRulerRef = useRef<HTMLDivElement>(null);
   const [editingActorId, setEditingActorId] = useState<string | null>(null);
   const [editingLabel, setEditingLabel] = useState('');
+  const [scrollLeft, setScrollLeft] = useState(0);
+
+  // Sync time ruler scroll with tracks scroll
+  useEffect(() => {
+    const scrollContainer = scrollContainerRef.current;
+    if (!scrollContainer) return;
+
+    const handleScroll = () => {
+      setScrollLeft(scrollContainer.scrollLeft);
+    };
+
+    scrollContainer.addEventListener('scroll', handleScroll);
+    return () => scrollContainer.removeEventListener('scroll', handleScroll);
+  }, []);
   
   const { 
     actors, 
@@ -138,84 +153,28 @@ export default function TimelinePanel() {
         </div>
       </div>
 
-      {/* Timeline content */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Track labels (fixed left column) */}
-        <div className="w-48 flex-shrink-0 border-r border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
+      {/* Timeline content - outer container for vertical scroll */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Header row (sticky) */}
+        <div className="flex flex-shrink-0">
           {/* Time ruler label */}
-          <div className="h-8 border-b border-[var(--color-border)] flex items-center px-3">
+          <div className="w-48 flex-shrink-0 h-8 border-b border-r border-[var(--color-border)] flex items-center px-3 bg-[var(--color-bg-secondary)]">
             <span className="text-xs text-[var(--color-text-secondary)]">Time</span>
           </div>
           
-          {/* Audio track label */}
-          <div className="h-16 border-b border-[var(--color-border)] flex items-center px-3">
-            <span className="text-sm">Audio</span>
-          </div>
-          
-          {/* Actor track labels */}
-          {actors.map((actor) => (
+          {/* Time ruler (horizontal scroll synced) */}
+          <div 
+            ref={timeRulerRef}
+            className="flex-1 h-8 border-b border-[var(--color-border)] overflow-hidden"
+          >
             <div 
-              key={actor.id}
-              className="h-12 border-b border-[var(--color-border)] flex items-center px-2 group gap-1"
+              className="h-full relative time-ruler cursor-pointer"
+              style={{ 
+                width: timelineWidth, 
+                transform: `translateX(-${scrollLeft}px)` 
+              }}
+              onClick={handleTimelineClick}
             >
-              {editingActorId === actor.id ? (
-                <input
-                  type="text"
-                  value={editingLabel}
-                  onChange={handleLabelChange}
-                  onBlur={() => handleLabelSubmit(actor.id)}
-                  onKeyDown={(e) => handleLabelKeyDown(e, actor.id)}
-                  className="flex-1 bg-[var(--color-bg-tertiary)] px-2 py-1 rounded text-sm outline-none
-                             border border-[var(--color-accent)]"
-                  autoFocus
-                />
-              ) : (
-                <>
-                  <span 
-                    className="text-sm truncate flex-1 cursor-pointer hover:text-[var(--color-accent)]"
-                    onDoubleClick={() => handleActorLabelDoubleClick(actor.id, actor.label)}
-                    title="Double-click to rename"
-                  >
-                    {actor.label}
-                  </span>
-                  <select
-                    value={actor.interpolation}
-                    onChange={(e) => handleInterpolationChange(actor.id, e.target.value as InterpolationType)}
-                    className="text-[10px] bg-[var(--color-bg-tertiary)] border border-[var(--color-border)] 
-                               rounded px-1 py-0.5 opacity-60 hover:opacity-100 focus:opacity-100
-                               transition-opacity cursor-pointer"
-                    title="Interpolation type"
-                  >
-                    {INTERPOLATION_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    onClick={() => handleRemoveActor(actor.id)}
-                    className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-500 transition-all"
-                    title="Remove actor"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </>
-              )}
-            </div>
-          ))}
-        </div>
-
-        {/* Scrollable timeline tracks */}
-        <div 
-          ref={scrollContainerRef}
-          className="flex-1 overflow-auto"
-          onClick={handleTimelineClick}
-        >
-          <div style={{ width: timelineWidth, minWidth: '100%' }}>
-            {/* Time ruler */}
-            <div className="h-8 border-b border-[var(--color-border)] relative time-ruler cursor-pointer">
               {timeMarkers.map((t) => (
                 <div
                   key={t}
@@ -237,33 +196,109 @@ export default function TimelinePanel() {
                 <div className="w-3 h-3 bg-[var(--color-accent)] -ml-[5px] -mt-1 rotate-45" />
               </div>
             </div>
+          </div>
+        </div>
 
-            {/* Waveform track */}
-            <div className="h-16 border-b border-[var(--color-border)] relative">
-              <WaveformTrack width={timelineWidth} zoom={ui.zoom} />
+        {/* Scrollable tracks area (both labels and tracks scroll together vertically) */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden">
+          <div className="flex">
+            {/* Track labels column (fixed width, scrolls vertically with tracks) */}
+            <div className="w-48 flex-shrink-0 border-r border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
+              {/* Audio track label */}
+              <div className="h-16 border-b border-[var(--color-border)] flex items-center px-3">
+                <span className="text-sm">Audio</span>
+              </div>
               
-              {/* Playhead line */}
-              <div 
-                className="absolute top-0 w-0.5 h-full bg-[var(--color-accent)] z-10 pointer-events-none"
-                style={{ left: playback.currentTime * ui.zoom }}
-              />
+              {/* Actor track labels */}
+              {actors.map((actor) => (
+                <div 
+                  key={actor.id}
+                  className="h-12 border-b border-[var(--color-border)] flex items-center px-2 group gap-1"
+                >
+                  {editingActorId === actor.id ? (
+                    <input
+                      type="text"
+                      value={editingLabel}
+                      onChange={handleLabelChange}
+                      onBlur={() => handleLabelSubmit(actor.id)}
+                      onKeyDown={(e) => handleLabelKeyDown(e, actor.id)}
+                      className="flex-1 bg-[var(--color-bg-tertiary)] px-2 py-1 rounded text-sm outline-none
+                                 border border-[var(--color-accent)]"
+                      autoFocus
+                    />
+                  ) : (
+                    <>
+                      <span 
+                        className="text-sm truncate flex-1 cursor-pointer hover:text-[var(--color-accent)]"
+                        onDoubleClick={() => handleActorLabelDoubleClick(actor.id, actor.label)}
+                        title="Double-click to rename"
+                      >
+                        {actor.label}
+                      </span>
+                      <select
+                        value={actor.interpolation}
+                        onChange={(e) => handleInterpolationChange(actor.id, e.target.value as InterpolationType)}
+                        className="text-[10px] bg-[var(--color-bg-tertiary)] border border-[var(--color-border)] 
+                                   rounded px-1 py-0.5 opacity-60 hover:opacity-100 focus:opacity-100
+                                   transition-opacity cursor-pointer"
+                        title="Interpolation type"
+                      >
+                        {INTERPOLATION_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => handleRemoveActor(actor.id)}
+                        className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-500 transition-all"
+                        title="Remove actor"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </>
+                  )}
+                </div>
+              ))}
             </div>
 
-            {/* Actor tracks */}
-            {actors.map((actor) => (
-              <div 
-                key={actor.id}
-                className="h-12 border-b border-[var(--color-border)] relative"
-              >
-                <ActorTrack actor={actor} width={timelineWidth} zoom={ui.zoom} />
-                
-                {/* Playhead line */}
-                <div 
-                  className="absolute top-0 w-0.5 h-full bg-[var(--color-accent)] z-10 pointer-events-none"
-                  style={{ left: playback.currentTime * ui.zoom }}
-                />
+            {/* Scrollable timeline tracks (horizontal scroll only here) */}
+            <div 
+              ref={scrollContainerRef}
+              className="flex-1 overflow-x-auto overflow-y-hidden"
+              onClick={handleTimelineClick}
+            >
+              <div style={{ width: timelineWidth, minWidth: '100%' }}>
+                {/* Waveform track */}
+                <div className="h-16 border-b border-[var(--color-border)] relative">
+                  <WaveformTrack width={timelineWidth} zoom={ui.zoom} />
+                  
+                  {/* Playhead line */}
+                  <div 
+                    className="absolute top-0 w-0.5 h-full bg-[var(--color-accent)] z-10 pointer-events-none"
+                    style={{ left: playback.currentTime * ui.zoom }}
+                  />
+                </div>
+
+                {/* Actor tracks */}
+                {actors.map((actor) => (
+                  <div 
+                    key={actor.id}
+                    className="h-12 border-b border-[var(--color-border)] relative"
+                  >
+                    <ActorTrack actor={actor} width={timelineWidth} zoom={ui.zoom} />
+                    
+                    {/* Playhead line */}
+                    <div 
+                      className="absolute top-0 w-0.5 h-full bg-[var(--color-accent)] z-10 pointer-events-none"
+                      style={{ left: playback.currentTime * ui.zoom }}
+                    />
+                  </div>
+                ))}
               </div>
-            ))}
+            </div>
           </div>
         </div>
       </div>
