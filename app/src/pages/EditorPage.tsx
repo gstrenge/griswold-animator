@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Toolbar from '../components/Toolbar';
 import CanvasPanel from '../components/canvas/CanvasPanel';
@@ -7,6 +7,7 @@ import { useProjectStore } from '../store';
 import type { GrisFile } from '../types';
 
 const LOCAL_STORAGE_KEY = 'griswold-autosave';
+const SPLIT_STORAGE_KEY = 'griswold-split-position';
 
 export default function EditorPage() {
   const navigate = useNavigate();
@@ -20,8 +21,53 @@ export default function EditorPage() {
     seek,
     setTool,
   } = useProjectStore();
+
+  // Splitter state - percentage of height for the canvas panel
+  const [canvasHeight, setCanvasHeight] = useState(() => {
+    const saved = localStorage.getItem(SPLIT_STORAGE_KEY);
+    return saved ? parseFloat(saved) : 55; // Default 55%
+  });
+  const [isDragging, setIsDragging] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
   
   const { undo, redo } = useProjectStore.temporal.getState();
+
+  // Handle splitter drag
+  const handleSplitterMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const container = containerRef.current;
+      if (!container) return;
+
+      const rect = container.getBoundingClientRect();
+      const y = e.clientY - rect.top;
+      const percentage = (y / rect.height) * 100;
+      
+      // Clamp between 20% and 80%
+      const clamped = Math.max(20, Math.min(80, percentage));
+      setCanvasHeight(clamped);
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+      // Save to localStorage
+      localStorage.setItem(SPLIT_STORAGE_KEY, canvasHeight.toString());
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, canvasHeight]);
 
   // Autosave to localStorage on changes (debounced)
   useEffect(() => {
@@ -147,14 +193,39 @@ export default function EditorPage() {
       <Toolbar onHome={() => navigate('/')} />
 
       {/* Main content area - split between canvas and timeline */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Canvas Panel - top half */}
-        <div className="flex-1 min-h-0 border-b border-[var(--color-border)]">
+      <div 
+        ref={containerRef}
+        className="flex-1 flex flex-col overflow-hidden"
+        style={{ cursor: isDragging ? 'row-resize' : undefined }}
+      >
+        {/* Canvas Panel - top */}
+        <div 
+          className="min-h-0 overflow-hidden"
+          style={{ height: `${canvasHeight}%` }}
+        >
           <CanvasPanel />
         </div>
 
-        {/* Timeline Panel - bottom half */}
-        <div className="h-[45%] min-h-[200px]">
+        {/* Draggable splitter */}
+        <div
+          className={`h-1.5 flex-shrink-0 cursor-row-resize group relative
+                      ${isDragging ? 'bg-[var(--color-accent)]' : 'bg-[var(--color-border)]'}
+                      hover:bg-[var(--color-accent)] transition-colors`}
+          onMouseDown={handleSplitterMouseDown}
+        >
+          {/* Visual handle indicator */}
+          <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-center pointer-events-none">
+            <div className={`w-12 h-1 rounded-full transition-colors
+                          ${isDragging ? 'bg-white' : 'bg-[var(--color-text-secondary)] opacity-50 group-hover:opacity-100'}`} 
+            />
+          </div>
+        </div>
+
+        {/* Timeline Panel - bottom */}
+        <div 
+          className="min-h-0 overflow-hidden"
+          style={{ height: `${100 - canvasHeight}%` }}
+        >
           <TimelinePanel />
         </div>
       </div>
