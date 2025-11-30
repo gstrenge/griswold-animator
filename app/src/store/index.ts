@@ -44,6 +44,7 @@ interface ProjectActions {
   removeActor: (id: string) => void;
   updateActor: (id: string, updates: Partial<Actor>) => void;
   setActorShape: (actorId: string, shape: Shape | null) => void;
+  reorderActors: (fromIndex: number, toIndex: number) => void;
   
   // Keyframe actions
   addKeyframe: (actorId: string, keyframe: KeyFrame) => void;
@@ -180,6 +181,14 @@ export const useProjectStore = create<ProjectStore>()(
             a.id === actorId ? { ...a, shape } : a
           ),
         })),
+
+      reorderActors: (fromIndex, toIndex) =>
+        set((state) => {
+          const newActors = [...state.actors];
+          const [removed] = newActors.splice(fromIndex, 1);
+          newActors.splice(toIndex, 0, removed);
+          return { actors: newActors };
+        }),
 
       // Keyframe actions
       addKeyframe: (actorId, keyframe) =>

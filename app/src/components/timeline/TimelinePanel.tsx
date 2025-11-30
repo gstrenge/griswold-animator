@@ -11,6 +11,10 @@ export default function TimelinePanel() {
   const [editingActorId, setEditingActorId] = useState<string | null>(null);
   const [editingLabel, setEditingLabel] = useState('');
   const [scrollLeft, setScrollLeft] = useState(0);
+  
+  // Drag-and-drop reordering state
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   // Sync time ruler scroll with tracks scroll
   useEffect(() => {
@@ -32,6 +36,7 @@ export default function TimelinePanel() {
     addActor,
     removeActor,
     updateActor,
+    reorderActors,
     setZoom,
     seek,
   } = useProjectStore();
@@ -39,6 +44,35 @@ export default function TimelinePanel() {
   const handleAddActor = () => {
     const label = `Actor ${actors.length + 1}`;
     addActor(label);
+  };
+
+  // Drag-and-drop handlers
+  const handleDragStart = (index: number) => {
+    setDraggedIndex(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (draggedIndex !== null && draggedIndex !== index) {
+      setDragOverIndex(index);
+    }
+  };
+
+  const handleDragLeave = () => {
+    setDragOverIndex(null);
+  };
+
+  const handleDrop = (index: number) => {
+    if (draggedIndex !== null && draggedIndex !== index) {
+      reorderActors(draggedIndex, index);
+    }
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+    setDragOverIndex(null);
   };
 
   const handleZoomIn = () => {
@@ -205,11 +239,34 @@ export default function TimelinePanel() {
               </div>
               
               {/* Actor track labels */}
-              {actors.map((actor) => (
+              {actors.map((actor, index) => (
                 <div 
                   key={actor.id}
-                  className="h-12 border-b border-[var(--color-border)] flex items-center px-2 group gap-1"
+                  draggable={editingActorId !== actor.id}
+                  onDragStart={() => handleDragStart(index)}
+                  onDragOver={(e) => handleDragOver(e, index)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={() => handleDrop(index)}
+                  onDragEnd={handleDragEnd}
+                  className={`h-12 border-b border-[var(--color-border)] flex items-center px-1 group gap-1 transition-colors
+                             ${draggedIndex === index ? 'opacity-50' : ''}
+                             ${dragOverIndex === index ? 'bg-[var(--color-accent)]/20 border-t-2 border-t-[var(--color-accent)]' : ''}`}
                 >
+                  {/* Drag handle */}
+                  <div 
+                    className="cursor-grab active:cursor-grabbing p-1 opacity-30 hover:opacity-100 transition-opacity"
+                    title="Drag to reorder"
+                  >
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                      <circle cx="9" cy="5" r="1.5" />
+                      <circle cx="15" cy="5" r="1.5" />
+                      <circle cx="9" cy="12" r="1.5" />
+                      <circle cx="15" cy="12" r="1.5" />
+                      <circle cx="9" cy="19" r="1.5" />
+                      <circle cx="15" cy="19" r="1.5" />
+                    </svg>
+                  </div>
+                  
                   {editingActorId === actor.id ? (
                     <input
                       type="text"
