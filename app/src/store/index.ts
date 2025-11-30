@@ -7,7 +7,8 @@ import type {
   PlaybackState, 
   UIState,
   KeyFrame,
-  Shape
+  Shape,
+  InterpolationType
 } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -150,6 +151,7 @@ export const useProjectStore = create<ProjectStore>()(
               label,
               shape: null,
               keyframes: [],
+              interpolation: 'step' as InterpolationType,
             },
           ],
         }));
@@ -337,7 +339,7 @@ export const useProjectStore = create<ProjectStore>()(
  * Get the interpolated value of an actor at a given time
  */
 export function getActorValueAtTime(actor: Actor, time: number): number {
-  const { keyframes } = actor;
+  const { keyframes, interpolation } = actor;
   
   if (keyframes.length === 0) return 0;
   
@@ -363,9 +365,17 @@ export function getActorValueAtTime(actor: Actor, time: number): number {
   // If same keyframe, return its value
   if (before.time === after.time) return before.value;
   
-  // Linear interpolation
-  const t = (time - before.time) / (after.time - before.time);
-  return before.value + t * (after.value - before.value);
+  // Apply interpolation based on actor's interpolation type
+  switch (interpolation) {
+    case 'linear': {
+      const t = (time - before.time) / (after.time - before.time);
+      return before.value + t * (after.value - before.value);
+    }
+    case 'step':
+    default:
+      // Step: hold previous value until next keyframe
+      return before.value;
+  }
 }
 
 /**

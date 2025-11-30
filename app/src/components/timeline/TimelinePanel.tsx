@@ -3,6 +3,7 @@ import { useProjectStore } from '../../store';
 import WaveformTrack from './WaveformTrack';
 import ActorTrack from './ActorTrack';
 import PlaybackControls from './PlaybackControls';
+import { INTERPOLATION_OPTIONS, type InterpolationType } from '../../types';
 
 export default function TimelinePanel() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -75,6 +76,10 @@ export default function TimelinePanel() {
     if (confirm('Remove this actor? This cannot be undone.')) {
       removeActor(actorId);
     }
+  };
+
+  const handleInterpolationChange = (actorId: string, interpolation: InterpolationType) => {
+    updateActor(actorId, { interpolation });
   };
 
   // Calculate timeline width based on duration
@@ -151,7 +156,7 @@ export default function TimelinePanel() {
           {actors.map((actor) => (
             <div 
               key={actor.id}
-              className="h-12 border-b border-[var(--color-border)] flex items-center px-3 group"
+              className="h-12 border-b border-[var(--color-border)] flex items-center px-2 group gap-1"
             >
               {editingActorId === actor.id ? (
                 <input
@@ -173,6 +178,20 @@ export default function TimelinePanel() {
                   >
                     {actor.label}
                   </span>
+                  <select
+                    value={actor.interpolation}
+                    onChange={(e) => handleInterpolationChange(actor.id, e.target.value as InterpolationType)}
+                    className="text-[10px] bg-[var(--color-bg-tertiary)] border border-[var(--color-border)] 
+                               rounded px-1 py-0.5 opacity-60 hover:opacity-100 focus:opacity-100
+                               transition-opacity cursor-pointer"
+                    title="Interpolation type"
+                  >
+                    {INTERPOLATION_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
                   <button
                     onClick={() => handleRemoveActor(actor.id)}
                     className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-500 transition-all"

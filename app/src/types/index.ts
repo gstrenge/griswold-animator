@@ -37,6 +37,17 @@ export interface KeyFrame {
 }
 
 // ============================================================================
+// Interpolation Types
+// ============================================================================
+
+export type InterpolationType = 'step' | 'linear';
+
+export const INTERPOLATION_OPTIONS: { value: InterpolationType; label: string }[] = [
+  { value: 'step', label: 'Step' },
+  { value: 'linear', label: 'Linear' },
+];
+
+// ============================================================================
 // Actor
 // ============================================================================
 
@@ -45,6 +56,7 @@ export interface Actor {
   label: string;
   shape: Shape | null;  // null if no shape assigned yet
   keyframes: KeyFrame[];
+  interpolation: InterpolationType;
 }
 
 // ============================================================================

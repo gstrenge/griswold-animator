@@ -153,25 +153,42 @@ export default function ActorTrack({ actor, width, zoom }: ActorTrackProps) {
 
     const points: string[] = [];
     const height = 48;
+    const valueToY = (value: number) => height - value * (height - 8);
     
     // Start from time 0
     const startValue = getActorValueAtTime(actor, 0);
-    points.push(`0,${height - startValue * (height - 8)}`);
+    points.push(`0,${valueToY(startValue)}`);
 
-    // Add all keyframe points
-    for (const kf of actor.keyframes) {
-      const x = kf.time * zoom;
-      const y = height - kf.value * (height - 8);
-      points.push(`${x},${y}`);
+    if (actor.interpolation === 'step') {
+      // Step interpolation: horizontal then vertical
+      let prevValue = startValue;
+      for (const kf of actor.keyframes) {
+        const x = kf.time * zoom;
+        // First: horizontal line to the new time at the OLD value
+        points.push(`${x},${valueToY(prevValue)}`);
+        // Then: vertical jump to the NEW value at the same time
+        points.push(`${x},${valueToY(kf.value)}`);
+        prevValue = kf.value;
+      }
+      // End at track width
+      const endX = Math.max(width, (playback.duration || 0) * zoom);
+      points.push(`${endX},${valueToY(prevValue)}`);
+    } else {
+      // Linear interpolation: direct lines between keyframes
+      for (const kf of actor.keyframes) {
+        const x = kf.time * zoom;
+        points.push(`${x},${valueToY(kf.value)}`);
+      }
+      // End at track width
+      const endX = Math.max(width, (playback.duration || 0) * zoom);
+      const endValue = actor.keyframes.length > 0 
+        ? actor.keyframes[actor.keyframes.length - 1].value 
+        : 0;
+      points.push(`${endX},${valueToY(endValue)}`);
     }
 
-    // End at track width
-    const endValue = getActorValueAtTime(actor, playback.duration || width / zoom);
-    const endX = Math.max(width, (playback.duration || 0) * zoom);
-    points.push(`${endX},${height - endValue * (height - 8)}`);
-
     return (
-      <svg className="absolute inset-0 pointer-events-none" style={{ width: Math.max(width, endX), height }}>
+      <svg className="absolute inset-0 pointer-events-none" style={{ width: Math.max(width, (playback.duration || 0) * zoom), height }}>
         <polyline
           points={points.join(' ')}
           fill="none"
