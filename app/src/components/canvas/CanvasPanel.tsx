@@ -61,6 +61,28 @@ export default function CanvasPanel() {
     setUI,
   } = useProjectStore();
 
+  // Get the currently selected actor
+  const selectedActor = actors.find(a => a.id === ui.selectedActorId) || null;
+
+  // Handle color changes for selected actor's shape
+  const handleColorChange = (colorType: 'off' | 'on', color: string) => {
+    if (selectedActor?.shape) {
+      const newShape: Shape = {
+        ...selectedActor.shape,
+        [colorType === 'off' ? 'offColor' : 'onColor']: color,
+      };
+      setActorShape(selectedActor.id, newShape);
+    }
+  };
+
+  // Handle removing shape from actor
+  const handleRemoveShape = () => {
+    if (selectedActor) {
+      setActorShape(selectedActor.id, null);
+      selectActor(null);
+    }
+  };
+
   // Preload background images
   useEffect(() => {
     backgrounds.forEach((bg) => {
@@ -733,6 +755,91 @@ export default function CanvasPanel() {
           }}
         />
       </div>
+
+      {/* Selected actor color editor panel */}
+      {selectedActor?.shape && (
+        <div className="absolute bottom-4 right-4 bg-[var(--color-bg-secondary)] rounded-lg p-4 shadow-xl border border-[var(--color-border)] w-64 z-40">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="font-semibold text-sm">{selectedActor.label}</h4>
+            <button
+              onClick={() => selectActor(null)}
+              className="p-1 hover:bg-[var(--color-bg-tertiary)] rounded transition-colors"
+              title="Deselect"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          
+          <div className="space-y-3">
+            {/* Off color */}
+            <div className="flex items-center gap-3">
+              <label className="text-xs text-[var(--color-text-secondary)] w-12">Off:</label>
+              <div className="flex items-center gap-2 flex-1">
+                <input
+                  type="color"
+                  value={selectedActor.shape.offColor}
+                  onChange={(e) => handleColorChange('off', e.target.value)}
+                  className="w-8 h-8 rounded cursor-pointer border border-[var(--color-border)]"
+                />
+                <input
+                  type="text"
+                  value={selectedActor.shape.offColor}
+                  onChange={(e) => handleColorChange('off', e.target.value)}
+                  className="flex-1 px-2 py-1 text-xs bg-[var(--color-bg-tertiary)] rounded border border-[var(--color-border)]"
+                />
+              </div>
+            </div>
+            
+            {/* On color */}
+            <div className="flex items-center gap-3">
+              <label className="text-xs text-[var(--color-text-secondary)] w-12">On:</label>
+              <div className="flex items-center gap-2 flex-1">
+                <input
+                  type="color"
+                  value={selectedActor.shape.onColor}
+                  onChange={(e) => handleColorChange('on', e.target.value)}
+                  className="w-8 h-8 rounded cursor-pointer border border-[var(--color-border)]"
+                />
+                <input
+                  type="text"
+                  value={selectedActor.shape.onColor}
+                  onChange={(e) => handleColorChange('on', e.target.value)}
+                  className="flex-1 px-2 py-1 text-xs bg-[var(--color-bg-tertiary)] rounded border border-[var(--color-border)]"
+                />
+              </div>
+            </div>
+
+            {/* Color preview */}
+            <div className="flex items-center gap-2 pt-2 border-t border-[var(--color-border)]">
+              <span className="text-xs text-[var(--color-text-secondary)]">Preview:</span>
+              <div 
+                className="w-8 h-8 rounded border border-[var(--color-border)]"
+                style={{ backgroundColor: selectedActor.shape.offColor }}
+                title="Off state"
+              />
+              <svg className="w-4 h-4 text-[var(--color-text-secondary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+              </svg>
+              <div 
+                className="w-8 h-8 rounded border border-[var(--color-border)]"
+                style={{ backgroundColor: selectedActor.shape.onColor }}
+                title="On state"
+              />
+            </div>
+            
+            {/* Remove shape button */}
+            <button
+              onClick={handleRemoveShape}
+              className="w-full mt-2 px-3 py-2 text-xs rounded bg-red-500/20 text-red-400 
+                         hover:bg-red-500/30 transition-colors border border-red-500/30"
+            >
+              Remove Shape
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Actor assignment modal */}
       {showActorAssignModal && (
