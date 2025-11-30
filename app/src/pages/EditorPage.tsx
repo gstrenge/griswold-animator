@@ -178,6 +178,23 @@ export default function EditorPage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
+  // Warn before closing tab/window to prevent accidental data loss
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      // Only show warning if there's actual content (actors or backgrounds)
+      if (actors.length > 0 || backgrounds.length > 0) {
+        e.preventDefault();
+        // Modern browsers ignore custom messages and show their own
+        // but we need to set returnValue for the dialog to appear
+        e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+        return e.returnValue;
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [actors.length, backgrounds.length]);
+
   // Handle browser back button
   useEffect(() => {
     const handlePopState = () => {
