@@ -8,6 +8,7 @@ export default function PlaybackControls() {
   const startWallTimeRef = useRef<number>(0);
   const startPlaybackTimeRef = useRef<number>(0);
   const isPlayingRef = useRef<boolean>(false);
+  const audioLatencyRef = useRef<number>(0);
 
   const { 
     playback, 
@@ -27,7 +28,10 @@ export default function PlaybackControls() {
     
     // Use performance.now() for accurate wall-clock timing
     const elapsedWallTime = (performance.now() - startWallTimeRef.current) / 1000;
-    const newTime = startPlaybackTimeRef.current + elapsedWallTime;
+    
+    // Subtract audio latency so visual doesn't get ahead of audio
+    const adjustedElapsed = Math.max(0, elapsedWallTime - audioLatencyRef.current);
+    const newTime = startPlaybackTimeRef.current + adjustedElapsed;
     
     // Get duration from store directly to avoid stale closure
     const { duration } = useProjectStore.getState().playback;
@@ -62,6 +66,11 @@ export default function PlaybackControls() {
       if (audioContextRef.current.state === 'suspended') {
         audioContextRef.current.resume();
       }
+      
+      // Capture audio output latency for sync compensation
+      // baseLatency: processing latency, outputLatency: device latency (may not be available)
+      const ctx = audioContextRef.current;
+      audioLatencyRef.current = (ctx.baseLatency || 0) + ((ctx as unknown as { outputLatency?: number }).outputLatency || 0);
       
       // Create and start audio source
       sourceNodeRef.current = audioContextRef.current.createBufferSource();
