@@ -49,16 +49,11 @@ export default function TimelinePanel() {
     setZoom(ui.zoom / 1.2);
   };
 
-  const handleTimelineClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-    
-    // Only handle clicks directly on the timeline header (time ruler)
-    const target = e.target as HTMLElement;
-    if (!target.classList.contains('time-ruler')) return;
-    
-    const rect = target.getBoundingClientRect();
-    const x = e.clientX - rect.left + container.scrollLeft;
+  const handleTimeRulerClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    // getBoundingClientRect already accounts for the CSS transform,
+    // so clientX - rect.left gives us the position within the element directly
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
     const time = x / ui.zoom;
     seek(Math.max(0, Math.min(time, playback.duration)));
   }, [ui.zoom, seek, playback.duration]);
@@ -173,7 +168,7 @@ export default function TimelinePanel() {
                 width: timelineWidth, 
                 transform: `translateX(-${scrollLeft}px)` 
               }}
-              onClick={handleTimelineClick}
+              onClick={handleTimeRulerClick}
             >
               {timeMarkers.map((t) => (
                 <div
@@ -268,7 +263,6 @@ export default function TimelinePanel() {
             <div 
               ref={scrollContainerRef}
               className="flex-1 overflow-x-auto overflow-y-hidden"
-              onClick={handleTimelineClick}
             >
               <div style={{ width: timelineWidth, minWidth: '100%' }}>
                 {/* Waveform track */}
