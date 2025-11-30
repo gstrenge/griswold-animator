@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../store';
+import { migrateGrisFile } from '../types';
 import type { GrisFile } from '../types';
 import { useEffect, useState } from 'react';
 
@@ -30,7 +31,9 @@ export default function LandingPage() {
 
       try {
         const text = await file.text();
-        const data: GrisFile = JSON.parse(text);
+        const rawData = JSON.parse(text);
+        // Migrate from older versions if needed
+        const data: GrisFile = migrateGrisFile(rawData);
         loadProject(data.project, data.actors, data.backgrounds);
         navigate('/editor');
       } catch (err) {
@@ -45,7 +48,9 @@ export default function LandingPage() {
     try {
       const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
       if (saved) {
-        const data: GrisFile = JSON.parse(saved);
+        const rawData = JSON.parse(saved);
+        // Migrate from older versions if needed
+        const data: GrisFile = migrateGrisFile(rawData);
         loadProject(data.project, data.actors, data.backgrounds);
         navigate('/editor');
       }

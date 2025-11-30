@@ -43,7 +43,10 @@ interface ProjectActions {
   addActor: (label: string) => string;
   removeActor: (id: string) => void;
   updateActor: (id: string, updates: Partial<Actor>) => void;
-  setActorShape: (actorId: string, shape: Shape | null) => void;
+  addActorShape: (actorId: string, shape: Shape) => void;
+  removeActorShape: (actorId: string, shapeIndex: number) => void;
+  clearActorShapes: (actorId: string) => void;
+  updateActorShapeColors: (actorId: string, offColor: string, onColor: string) => void;
   reorderActors: (fromIndex: number, toIndex: number) => void;
   
   // Keyframe actions
@@ -151,7 +154,7 @@ export const useProjectStore = create<ProjectStore>()(
             {
               id,
               label,
-              shape: null,
+              shapes: [],  // Array of shapes (supports multiple/disconnected)
               keyframes: [],
               interpolation: 'step' as InterpolationType,
             },
@@ -175,10 +178,38 @@ export const useProjectStore = create<ProjectStore>()(
           ),
         })),
 
-      setActorShape: (actorId, shape) =>
+      addActorShape: (actorId, shape) =>
         set((state) => ({
           actors: state.actors.map((a) =>
-            a.id === actorId ? { ...a, shape } : a
+            a.id === actorId ? { ...a, shapes: [...a.shapes, shape] } : a
+          ),
+        })),
+
+      removeActorShape: (actorId, shapeIndex) =>
+        set((state) => ({
+          actors: state.actors.map((a) =>
+            a.id === actorId 
+              ? { ...a, shapes: a.shapes.filter((_, i) => i !== shapeIndex) } 
+              : a
+          ),
+        })),
+
+      clearActorShapes: (actorId) =>
+        set((state) => ({
+          actors: state.actors.map((a) =>
+            a.id === actorId ? { ...a, shapes: [] } : a
+          ),
+        })),
+
+      updateActorShapeColors: (actorId, offColor, onColor) =>
+        set((state) => ({
+          actors: state.actors.map((a) =>
+            a.id === actorId 
+              ? { 
+                  ...a, 
+                  shapes: a.shapes.map(s => ({ ...s, offColor, onColor }))
+                } 
+              : a
           ),
         })),
 

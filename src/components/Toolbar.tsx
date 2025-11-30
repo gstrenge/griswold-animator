@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useProjectStore, getActorValueAtTime } from '../store';
+import { GRIS_FILE_VERSION } from '../types';
 import type { GrisFile, ExportedCue } from '../types';
 
 interface ToolbarProps {
@@ -18,7 +19,7 @@ export default function Toolbar({ onHome }: ToolbarProps) {
 
   const handleExportGris = () => {
     const data: GrisFile = {
-      version: 1,
+      version: GRIS_FILE_VERSION,
       project,
       actors,
       backgrounds,

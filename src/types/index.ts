@@ -54,7 +54,16 @@ export const INTERPOLATION_OPTIONS: { value: InterpolationType; label: string }[
 export interface Actor {
   id: string;
   label: string;
-  shape: Shape | null;  // null if no shape assigned yet
+  shapes: Shape[];  // Array of shapes (supports disconnected polygons)
+  keyframes: KeyFrame[];
+  interpolation: InterpolationType;
+}
+
+// Legacy Actor type for migration (v1 format)
+export interface ActorV1 {
+  id: string;
+  label: string;
+  shape: Shape | null;
   keyframes: KeyFrame[];
   interpolation: InterpolationType;
 }
@@ -117,10 +126,45 @@ export interface ExportedCue {
   state: number;
 }
 
+// Current version of the file format
+export const GRIS_FILE_VERSION = 2;
+
 export interface GrisFile {
   version: number;
   project: Project;
   actors: Actor[];
   backgrounds: CanvasBackground[];
+}
+
+// Legacy file format (v1) for migration
+export interface GrisFileV1 {
+  version: number;
+  project: Project;
+  actors: ActorV1[];
+  backgrounds: CanvasBackground[];
+}
+
+// Migration function: converts any version to current
+export function migrateGrisFile(data: unknown): GrisFile {
+  const file = data as GrisFileV1 & { version?: number };
+  
+  // Handle v1 or missing version (shape → shapes)
+  if (!file.version || file.version === 1) {
+    return {
+      version: GRIS_FILE_VERSION,
+      project: file.project,
+      backgrounds: file.backgrounds || [],
+      actors: (file.actors || []).map((actor: ActorV1) => ({
+        id: actor.id,
+        label: actor.label,
+        shapes: actor.shape ? [actor.shape] : [],
+        keyframes: actor.keyframes || [],
+        interpolation: actor.interpolation || 'step',
+      })),
+    };
+  }
+  
+  // Already current version
+  return file as unknown as GrisFile;
 }
 

@@ -57,28 +57,29 @@ export default function CanvasPanel() {
     selectActor,
     selectBackground,
     setTool,
-    setActorShape,
+    addActorShape,
+    clearActorShapes,
+    updateActorShapeColors,
     setUI,
   } = useProjectStore();
 
   // Get the currently selected actor
   const selectedActor = actors.find(a => a.id === ui.selectedActorId) || null;
 
-  // Handle color changes for selected actor's shape
+  // Handle color changes for selected actor's shapes (applies to all shapes)
   const handleColorChange = (colorType: 'off' | 'on', color: string) => {
-    if (selectedActor?.shape) {
-      const newShape: Shape = {
-        ...selectedActor.shape,
-        [colorType === 'off' ? 'offColor' : 'onColor']: color,
-      };
-      setActorShape(selectedActor.id, newShape);
+    if (selectedActor && selectedActor.shapes.length > 0) {
+      const currentShape = selectedActor.shapes[0]; // Use first shape as reference
+      const offColor = colorType === 'off' ? color : currentShape.offColor;
+      const onColor = colorType === 'on' ? color : currentShape.onColor;
+      updateActorShapeColors(selectedActor.id, offColor, onColor);
     }
   };
 
-  // Handle removing shape from actor
-  const handleRemoveShape = () => {
+  // Handle removing all shapes from actor
+  const handleRemoveShapes = () => {
     if (selectedActor) {
-      setActorShape(selectedActor.id, null);
+      clearActorShapes(selectedActor.id);
       selectActor(null);
     }
   };
@@ -172,32 +173,44 @@ export default function CanvasPanel() {
 
     // Draw actor shapes
     for (const actor of actors) {
-      if (!actor.shape) continue;
+      if (actor.shapes.length === 0) continue;
 
       const value = getActorValueAtTime(actor, playback.currentTime);
-      const color = interpolateColor(actor.shape.offColor, actor.shape.onColor, value);
+      const isSelected = ui.selectedActorId === actor.id;
       
-      ctx.fillStyle = color;
-      ctx.strokeStyle = ui.selectedActorId === actor.id ? '#ff6b35' : '#ffffff';
-      ctx.lineWidth = ui.selectedActorId === actor.id ? 3 : 1;
+      // Draw all shapes for this actor
+      let labelBounds: { centerX: number; centerY: number } | null = null;
+      
+      for (const shape of actor.shapes) {
+        const color = interpolateColor(shape.offColor, shape.onColor, value);
+        
+        ctx.fillStyle = color;
+        ctx.strokeStyle = isSelected ? '#ff6b35' : '#ffffff';
+        ctx.lineWidth = isSelected ? 3 : 1;
 
-      const { geometry } = actor.shape;
-      drawPolygon(ctx, geometry);
+        drawPolygon(ctx, shape.geometry);
+        
+        // Use first shape's bounds for label position
+        if (!labelBounds) {
+          labelBounds = getPolygonBounds(shape.geometry);
+        }
+      }
 
-      // Draw actor label
-      const bounds = getPolygonBounds(geometry);
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 14px JetBrains Mono, monospace';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      
-      // Draw text background
-      const textWidth = ctx.measureText(actor.label).width;
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-      ctx.fillRect(bounds.centerX - textWidth / 2 - 4, bounds.centerY - 10, textWidth + 8, 20);
-      
-      ctx.fillStyle = '#ffffff';
-      ctx.fillText(actor.label, bounds.centerX, bounds.centerY);
+      // Draw actor label on first shape
+      if (labelBounds) {
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 14px JetBrains Mono, monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        // Draw text background
+        const textWidth = ctx.measureText(actor.label).width;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(labelBounds.centerX - textWidth / 2 - 4, labelBounds.centerY - 10, textWidth + 8, 20);
+        
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(actor.label, labelBounds.centerX, labelBounds.centerY);
+      }
     }
 
     // Draw current drawing preview
@@ -497,12 +510,14 @@ export default function CanvasPanel() {
     }
 
     if (ui.tool === 'select') {
-      // Check if clicked on an actor shape
+      // Check if clicked on any of an actor's shapes
       for (const actor of [...actors].reverse()) {
-        if (!actor.shape) continue;
-        if (isPointInPolygon(x, y, actor.shape.geometry)) {
-          selectActor(actor.id);
-          return;
+        if (actor.shapes.length === 0) continue;
+        for (const shape of actor.shapes) {
+          if (isPointInPolygon(x, y, shape.geometry)) {
+            selectActor(actor.id);
+            return;
+          }
         }
       }
 
@@ -540,15 +555,20 @@ export default function CanvasPanel() {
     }
   }, [ui.tool, drawingState.polygonPoints]);
 
-  // Assign shape to actor
+  // Assign shape to actor (add to actor's shapes array)
   const handleAssignToActor = (actorId: string) => {
     if (pendingShape) {
+      // Find the actor to get existing colors (if any)
+      const actor = actors.find(a => a.id === actorId);
+      const existingShape = actor?.shapes[0];
+      
       const shape: Shape = {
         geometry: pendingShape,
-        offColor: '#333333',
-        onColor: '#ffcc00',
+        // Use existing colors if actor already has shapes, otherwise defaults
+        offColor: existingShape?.offColor || '#333333',
+        onColor: existingShape?.onColor || '#ffcc00',
       };
-      setActorShape(actorId, shape);
+      addActorShape(actorId, shape);
     }
     setPendingShape(null);
     setShowActorAssignModal(false);
@@ -757,10 +777,17 @@ export default function CanvasPanel() {
       </div>
 
       {/* Selected actor color editor panel */}
-      {selectedActor?.shape && (
+      {selectedActor && selectedActor.shapes.length > 0 && (
         <div className="absolute bottom-4 right-4 bg-[var(--color-bg-secondary)] rounded-lg p-4 shadow-xl border border-[var(--color-border)] w-64 z-40">
           <div className="flex items-center justify-between mb-3">
-            <h4 className="font-semibold text-sm">{selectedActor.label}</h4>
+            <div>
+              <h4 className="font-semibold text-sm">{selectedActor.label}</h4>
+              {selectedActor.shapes.length > 1 && (
+                <span className="text-xs text-[var(--color-text-secondary)]">
+                  {selectedActor.shapes.length} shapes (colors synced)
+                </span>
+              )}
+            </div>
             <button
               onClick={() => selectActor(null)}
               className="p-1 hover:bg-[var(--color-bg-tertiary)] rounded transition-colors"
@@ -779,13 +806,13 @@ export default function CanvasPanel() {
               <div className="flex items-center gap-2 flex-1">
                 <input
                   type="color"
-                  value={selectedActor.shape.offColor}
+                  value={selectedActor.shapes[0].offColor}
                   onChange={(e) => handleColorChange('off', e.target.value)}
                   className="w-8 h-8 rounded cursor-pointer border border-[var(--color-border)]"
                 />
                 <input
                   type="text"
-                  value={selectedActor.shape.offColor}
+                  value={selectedActor.shapes[0].offColor}
                   onChange={(e) => handleColorChange('off', e.target.value)}
                   className="flex-1 px-2 py-1 text-xs bg-[var(--color-bg-tertiary)] rounded border border-[var(--color-border)]"
                 />
@@ -798,13 +825,13 @@ export default function CanvasPanel() {
               <div className="flex items-center gap-2 flex-1">
                 <input
                   type="color"
-                  value={selectedActor.shape.onColor}
+                  value={selectedActor.shapes[0].onColor}
                   onChange={(e) => handleColorChange('on', e.target.value)}
                   className="w-8 h-8 rounded cursor-pointer border border-[var(--color-border)]"
                 />
                 <input
                   type="text"
-                  value={selectedActor.shape.onColor}
+                  value={selectedActor.shapes[0].onColor}
                   onChange={(e) => handleColorChange('on', e.target.value)}
                   className="flex-1 px-2 py-1 text-xs bg-[var(--color-bg-tertiary)] rounded border border-[var(--color-border)]"
                 />
@@ -816,7 +843,7 @@ export default function CanvasPanel() {
               <span className="text-xs text-[var(--color-text-secondary)]">Preview:</span>
               <div 
                 className="w-8 h-8 rounded border border-[var(--color-border)]"
-                style={{ backgroundColor: selectedActor.shape.offColor }}
+                style={{ backgroundColor: selectedActor.shapes[0].offColor }}
                 title="Off state"
               />
               <svg className="w-4 h-4 text-[var(--color-text-secondary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -824,18 +851,18 @@ export default function CanvasPanel() {
               </svg>
               <div 
                 className="w-8 h-8 rounded border border-[var(--color-border)]"
-                style={{ backgroundColor: selectedActor.shape.onColor }}
+                style={{ backgroundColor: selectedActor.shapes[0].onColor }}
                 title="On state"
               />
             </div>
             
-            {/* Remove shape button */}
+            {/* Remove all shapes button */}
             <button
-              onClick={handleRemoveShape}
+              onClick={handleRemoveShapes}
               className="w-full mt-2 px-3 py-2 text-xs rounded bg-red-500/20 text-red-400 
                          hover:bg-red-500/30 transition-colors border border-red-500/30"
             >
-              Remove Shape
+              Remove All Shapes ({selectedActor.shapes.length})
             </button>
           </div>
         </div>
@@ -857,16 +884,14 @@ export default function CanvasPanel() {
                   <button
                     key={actor.id}
                     onClick={() => handleAssignToActor(actor.id)}
-                    className={`w-full p-3 rounded text-left transition-colors ${
-                      actor.shape 
-                        ? 'bg-[var(--color-bg-tertiary)] opacity-50' 
-                        : 'bg-[var(--color-bg-tertiary)] hover:bg-[var(--color-accent)] hover:text-white'
-                    }`}
-                    disabled={!!actor.shape}
+                    className="w-full p-3 rounded text-left transition-colors
+                               bg-[var(--color-bg-tertiary)] hover:bg-[var(--color-accent)] hover:text-white"
                   >
                     <span className="font-medium">{actor.label}</span>
-                    {actor.shape && (
-                      <span className="text-xs ml-2 opacity-70">(has shape)</span>
+                    {actor.shapes.length > 0 && (
+                      <span className="text-xs ml-2 opacity-70">
+                        ({actor.shapes.length} shape{actor.shapes.length !== 1 ? 's' : ''})
+                      </span>
                     )}
                   </button>
                 ))}

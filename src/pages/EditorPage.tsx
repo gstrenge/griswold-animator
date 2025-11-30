@@ -4,6 +4,7 @@ import Toolbar from '../components/Toolbar';
 import CanvasPanel from '../components/canvas/CanvasPanel';
 import TimelinePanel from '../components/timeline/TimelinePanel';
 import { useProjectStore } from '../store';
+import { GRIS_FILE_VERSION } from '../types';
 import type { GrisFile } from '../types';
 
 const LOCAL_STORAGE_KEY = 'griswold-autosave';
@@ -74,7 +75,7 @@ export default function EditorPage() {
     const timeoutId = setTimeout(() => {
       try {
         const data: GrisFile = {
-          version: 1,
+          version: GRIS_FILE_VERSION,
           project,
           actors,
           backgrounds,
