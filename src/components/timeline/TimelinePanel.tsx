@@ -33,17 +33,53 @@ export default function TimelinePanel() {
     actors, 
     playback, 
     ui,
+    audioBuffer,
     addActor,
     removeActor,
     updateActor,
     reorderActors,
     setZoom,
     seek,
+    setAudioBuffer,
+    setAudioFile,
+    setPlayback,
   } = useProjectStore();
 
   const handleAddActor = () => {
     const label = `Actor ${actors.length + 1}`;
     addActor(label);
+  };
+
+  // Handle loading audio file
+  const handleLoadAudio = useCallback(async (file: File) => {
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const audioContext = new AudioContext();
+      const buffer = await audioContext.decodeAudioData(arrayBuffer);
+      
+      setAudioBuffer(buffer);
+      setAudioFile(file);
+      setPlayback({ 
+        duration: buffer.duration,
+        currentTime: 0,
+      });
+    } catch (err) {
+      console.error('Failed to load audio:', err);
+      alert('Failed to load audio file. Please ensure it is a valid audio file.');
+    }
+  }, [setAudioBuffer, setAudioFile, setPlayback]);
+
+  const handleLoadAudioClick = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'audio/*';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        handleLoadAudio(file);
+      }
+    };
+    input.click();
   };
 
   // Drag-and-drop handlers
@@ -234,8 +270,22 @@ export default function TimelinePanel() {
             {/* Track labels column (fixed width, scrolls vertically with tracks) */}
             <div className="w-48 flex-shrink-0 border-r border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
               {/* Audio track label */}
-              <div className="h-16 border-b border-[var(--color-border)] flex items-center px-3">
-                <span className="text-sm">Audio</span>
+              <div className="h-16 border-b border-[var(--color-border)] flex items-center px-3 group gap-2">
+                <span className="text-sm flex-1">Audio</span>
+                <button
+                  onClick={handleLoadAudioClick}
+                  className={`p-1 rounded transition-all ${
+                    audioBuffer 
+                      ? 'opacity-0 group-hover:opacity-60 hover:!opacity-100 hover:bg-[var(--color-bg-tertiary)]'
+                      : 'opacity-100 text-[var(--color-accent)]'
+                  }`}
+                  title={audioBuffer ? "Replace audio file" : "Load audio file"}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                          d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                  </svg>
+                </button>
               </div>
               
               {/* Actor track labels */}
@@ -324,7 +374,7 @@ export default function TimelinePanel() {
               <div style={{ width: timelineWidth, minWidth: '100%' }}>
                 {/* Waveform track */}
                 <div className="h-16 border-b border-[var(--color-border)] relative">
-                  <WaveformTrack width={timelineWidth} zoom={ui.zoom} />
+                  <WaveformTrack width={timelineWidth} zoom={ui.zoom} onRequestLoadAudio={handleLoadAudioClick} />
                   
                   {/* Playhead line */}
                   <div 

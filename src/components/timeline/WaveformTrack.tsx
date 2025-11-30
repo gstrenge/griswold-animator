@@ -4,13 +4,14 @@ import { useProjectStore } from '../../store';
 interface WaveformTrackProps {
   width: number;
   zoom: number;
+  onRequestLoadAudio?: () => void;
 }
 
-export default function WaveformTrack({ width, zoom }: WaveformTrackProps) {
+export default function WaveformTrack({ width, zoom, onRequestLoadAudio }: WaveformTrackProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [waveformData, setWaveformData] = useState<number[]>([]);
   
-  const { audioBuffer, setAudioBuffer, setAudioFile, setPlayback, playback } = useProjectStore();
+  const { audioBuffer, setAudioBuffer, setAudioFile, setPlayback, playback, seek } = useProjectStore();
 
   // Generate waveform data from audio buffer
   useEffect(() => {
@@ -105,18 +106,31 @@ export default function WaveformTrack({ width, zoom }: WaveformTrackProps) {
     }
   };
 
-  const handleClick = () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'audio/*';
-    input.onchange = (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (file) {
-        handleLoadAudio(file);
-      }
-    };
-    input.click();
-  };
+  // Handle click - seek if audio loaded, otherwise prompt to load
+  const handleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (audioBuffer) {
+      // Seek to clicked position
+      const rect = e.currentTarget.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const time = x / zoom;
+      seek(Math.max(0, Math.min(time, playback.duration)));
+    } else if (onRequestLoadAudio) {
+      // Use provided callback
+      onRequestLoadAudio();
+    } else {
+      // Fallback to built-in file picker
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'audio/*';
+      input.onchange = (ev) => {
+        const file = (ev.target as HTMLInputElement).files?.[0];
+        if (file) {
+          handleLoadAudio(file);
+        }
+      };
+      input.click();
+    }
+  }, [audioBuffer, zoom, seek, playback.duration, onRequestLoadAudio, handleLoadAudio]);
 
   return (
     <canvas
@@ -125,6 +139,7 @@ export default function WaveformTrack({ width, zoom }: WaveformTrackProps) {
       onClick={handleClick}
       onDrop={handleDrop}
       onDragOver={(e) => e.preventDefault()}
+      title={audioBuffer ? "Click to seek" : "Click to load audio or drop file here"}
     />
   );
 }
