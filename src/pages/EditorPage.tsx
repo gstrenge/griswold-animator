@@ -16,11 +16,13 @@ export default function EditorPage() {
     project, 
     actors, 
     backgrounds, 
+    markers,
     playback,
     play,
     pause,
     seek,
     setTool,
+    addMarker,
   } = useProjectStore();
 
   // Splitter state - percentage of height for the canvas panel
@@ -79,6 +81,7 @@ export default function EditorPage() {
           project,
           actors,
           backgrounds,
+          markers,
         };
         const json = JSON.stringify(data);
         
@@ -95,7 +98,7 @@ export default function EditorPage() {
     }, 1000); // 1 second debounce
 
     return () => clearTimeout(timeoutId);
-  }, [project, actors, backgrounds]);
+  }, [project, actors, backgrounds, markers]);
 
   // Global keyboard shortcuts
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -159,6 +162,13 @@ export default function EditorPage() {
       return;
     }
 
+    // Add marker: Period/Dot
+    if (e.key === '.') {
+      e.preventDefault();
+      addMarker(playback.currentTime);
+      return;
+    }
+
     // Tool shortcuts
     if (e.key === 'v' || e.key === 'V') {
       setTool('select');
@@ -172,7 +182,7 @@ export default function EditorPage() {
       setTool('polygon');
       return;
     }
-  }, [undo, redo, playback.isPlaying, playback.currentTime, playback.duration, play, pause, seek, setTool]);
+  }, [undo, redo, playback.isPlaying, playback.currentTime, playback.duration, play, pause, seek, setTool, addMarker]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
@@ -251,7 +261,7 @@ export default function EditorPage() {
       {/* Keyboard shortcuts help */}
       <div className="absolute bottom-4 right-4 text-xs text-[var(--color-text-secondary)] opacity-50 pointer-events-none">
         <div>Space: Play/Pause • ←→: Step • Ctrl+Z/Y: Undo/Redo</div>
-        <div>V: Select • R: Rectangle • P: Polygon</div>
+        <div>V: Select • R: Rectangle • P: Polygon • Period: Add Marker</div>
       </div>
     </div>
   );

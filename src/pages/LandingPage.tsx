@@ -34,7 +34,7 @@ export default function LandingPage() {
         const rawData = JSON.parse(text);
         // Migrate from older versions if needed
         const data: GrisFile = migrateGrisFile(rawData);
-        loadProject(data.project, data.actors, data.backgrounds);
+        loadProject(data.project, data.actors, data.backgrounds, data.markers);
         navigate('/editor');
       } catch (err) {
         console.error('Failed to load project:', err);
@@ -51,7 +51,7 @@ export default function LandingPage() {
         const rawData = JSON.parse(saved);
         // Migrate from older versions if needed
         const data: GrisFile = migrateGrisFile(rawData);
-        loadProject(data.project, data.actors, data.backgrounds);
+        loadProject(data.project, data.actors, data.backgrounds, data.markers);
         navigate('/editor');
       }
     } catch (err) {

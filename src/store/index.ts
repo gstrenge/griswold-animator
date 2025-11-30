@@ -8,7 +8,8 @@ import type {
   UIState,
   KeyFrame,
   Shape,
-  InterpolationType
+  InterpolationType,
+  Marker
 } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -21,6 +22,7 @@ interface ProjectState {
   project: Project;
   actors: Actor[];
   backgrounds: CanvasBackground[];
+  markers: Marker[];
   
   // Playback state (not tracked for undo)
   playback: PlaybackState;
@@ -37,7 +39,12 @@ interface ProjectActions {
   // Project actions
   setProject: (project: Partial<Project>) => void;
   resetProject: () => void;
-  loadProject: (project: Project, actors: Actor[], backgrounds: CanvasBackground[]) => void;
+  loadProject: (project: Project, actors: Actor[], backgrounds: CanvasBackground[], markers?: Marker[]) => void;
+  
+  // Marker actions
+  addMarker: (time: number, label?: string) => string;
+  removeMarker: (id: string) => void;
+  updateMarker: (id: string, updates: Partial<Marker>) => void;
   
   // Actor actions
   addActor: (label: string) => string;
@@ -109,6 +116,7 @@ const initialState: ProjectState = {
   project: initialProject,
   actors: [],
   backgrounds: [],
+  markers: [],
   playback: initialPlayback,
   ui: initialUI,
   audioBuffer: null,
@@ -137,13 +145,35 @@ export const useProjectStore = create<ProjectStore>()(
           ui: initialUI,
         }),
 
-      loadProject: (project, actors, backgrounds) =>
+      loadProject: (project, actors, backgrounds, markers = []) =>
         set({
           project,
           actors,
           backgrounds,
+          markers,
           ui: { ...initialUI },
         }),
+
+      // Marker actions
+      addMarker: (time, label) => {
+        const id = uuidv4();
+        set((state) => ({
+          markers: [...state.markers, { id, time, label }].sort((a, b) => a.time - b.time),
+        }));
+        return id;
+      },
+
+      removeMarker: (id) =>
+        set((state) => ({
+          markers: state.markers.filter((m) => m.id !== id),
+        })),
+
+      updateMarker: (id, updates) =>
+        set((state) => ({
+          markers: state.markers
+            .map((m) => (m.id === id ? { ...m, ...updates } : m))
+            .sort((a, b) => a.time - b.time),
+        })),
 
       // Actor actions
       addActor: (label) => {
@@ -366,6 +396,7 @@ export const useProjectStore = create<ProjectStore>()(
         project: state.project,
         actors: state.actors,
         backgrounds: state.backgrounds,
+        markers: state.markers,
       }),
       limit: 100, // Keep last 100 states
     }

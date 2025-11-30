@@ -117,6 +117,17 @@ export interface UIState {
 }
 
 // ============================================================================
+// Timeline Markers
+// ============================================================================
+
+export interface Marker {
+  id: string;
+  time: number;  // seconds
+  label?: string;  // optional label
+  color?: string;  // optional color (default: accent color)
+}
+
+// ============================================================================
 // Utility Types
 // ============================================================================
 
@@ -127,16 +138,17 @@ export interface ExportedCue {
 }
 
 // Current version of the file format
-export const GRIS_FILE_VERSION = 2;
+export const GRIS_FILE_VERSION = 3;
 
 export interface GrisFile {
   version: number;
   project: Project;
   actors: Actor[];
   backgrounds: CanvasBackground[];
+  markers: Marker[];
 }
 
-// Legacy file format (v1) for migration
+// Legacy file formats for migration
 export interface GrisFileV1 {
   version: number;
   project: Project;
@@ -144,16 +156,25 @@ export interface GrisFileV1 {
   backgrounds: CanvasBackground[];
 }
 
+export interface GrisFileV2 {
+  version: number;
+  project: Project;
+  actors: Actor[];
+  backgrounds: CanvasBackground[];
+  // No markers field
+}
+
 // Migration function: converts any version to current
 export function migrateGrisFile(data: unknown): GrisFile {
-  const file = data as GrisFileV1 & { version?: number };
+  const file = data as GrisFileV1 & GrisFileV2 & { version?: number; markers?: Marker[] };
   
-  // Handle v1 or missing version (shape → shapes)
+  // Handle v1 (shape → shapes)
   if (!file.version || file.version === 1) {
     return {
       version: GRIS_FILE_VERSION,
       project: file.project,
       backgrounds: file.backgrounds || [],
+      markers: [],
       actors: (file.actors || []).map((actor: ActorV1) => ({
         id: actor.id,
         label: actor.label,
@@ -162,6 +183,15 @@ export function migrateGrisFile(data: unknown): GrisFile {
         interpolation: actor.interpolation || 'step',
       })),
     };
+  }
+  
+  // Handle v2 (add empty markers array)
+  if (file.version === 2) {
+    return {
+      ...file,
+      version: GRIS_FILE_VERSION,
+      markers: file.markers || [],
+    } as GrisFile;
   }
   
   // Already current version

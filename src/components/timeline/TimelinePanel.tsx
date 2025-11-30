@@ -34,6 +34,7 @@ export default function TimelinePanel() {
     playback, 
     ui,
     audioBuffer,
+    markers,
     addActor,
     removeActor,
     updateActor,
@@ -43,6 +44,7 @@ export default function TimelinePanel() {
     setAudioBuffer,
     setAudioFile,
     setPlayback,
+    removeMarker,
   } = useProjectStore();
 
   const handleAddActor = () => {
@@ -253,9 +255,33 @@ export default function TimelinePanel() {
                 </div>
               ))}
               
+              {/* Global markers on time ruler */}
+              {markers.map((marker) => (
+                <div
+                  key={marker.id}
+                  className="absolute top-0 h-full cursor-pointer group z-20"
+                  style={{ left: marker.time * ui.zoom }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    seek(marker.time);
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    removeMarker(marker.id);
+                  }}
+                  title={`${marker.label || 'Marker'} @ ${formatTime(marker.time)} (right-click to remove)`}
+                >
+                  <div 
+                    className="w-2 h-2 bg-yellow-400 -ml-1 rotate-45 group-hover:scale-125 transition-transform"
+                    style={{ backgroundColor: marker.color || '#facc15' }}
+                  />
+                </div>
+              ))}
+              
               {/* Playhead */}
               <div 
-                className="absolute top-0 w-0.5 h-full bg-[var(--color-accent)] z-10"
+                className="absolute top-0 w-0.5 h-full bg-[var(--color-accent)] z-30"
                 style={{ left: playback.currentTime * ui.zoom }}
               >
                 <div className="w-3 h-3 bg-[var(--color-accent)] -ml-[5px] -mt-1 rotate-45" />
@@ -369,9 +395,31 @@ export default function TimelinePanel() {
             {/* Scrollable timeline tracks (horizontal scroll only here) */}
             <div 
               ref={scrollContainerRef}
-              className="flex-1 overflow-x-auto overflow-y-hidden"
+              className="flex-1 overflow-x-auto overflow-y-hidden relative"
             >
-              <div style={{ width: timelineWidth, minWidth: '100%' }}>
+              <div style={{ width: timelineWidth, minWidth: '100%' }} className="relative">
+                {/* Global marker lines spanning all tracks */}
+                {markers.map((marker) => (
+                  <div
+                    key={`marker-line-${marker.id}`}
+                    className="absolute top-0 bottom-0 w-px opacity-40 hover:opacity-80 cursor-pointer transition-opacity z-5"
+                    style={{ 
+                      left: marker.time * ui.zoom,
+                      backgroundColor: marker.color || '#facc15',
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      seek(marker.time);
+                    }}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      removeMarker(marker.id);
+                    }}
+                    title={`${marker.label || 'Marker'} @ ${formatTime(marker.time)} (right-click to remove)`}
+                  />
+                ))}
+
                 {/* Waveform track */}
                 <div className="h-16 border-b border-[var(--color-border)] relative">
                   <WaveformTrack width={timelineWidth} zoom={ui.zoom} onRequestLoadAudio={handleLoadAudioClick} />

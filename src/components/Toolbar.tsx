@@ -8,7 +8,7 @@ interface ToolbarProps {
 }
 
 export default function Toolbar({ onHome }: ToolbarProps) {
-  const { project, actors, backgrounds, playback, setProject } = useProjectStore();
+  const { project, actors, backgrounds, markers, playback, setProject } = useProjectStore();
   const { undo, redo, pastStates, futureStates } = useProjectStore.temporal.getState();
   
   const [showExportModal, setShowExportModal] = useState(false);
@@ -23,6 +23,7 @@ export default function Toolbar({ onHome }: ToolbarProps) {
       project,
       actors,
       backgrounds,
+      markers,
     };
     const json = JSON.stringify(data, null, 2);
     const blob = new Blob([json], { type: 'application/json' });

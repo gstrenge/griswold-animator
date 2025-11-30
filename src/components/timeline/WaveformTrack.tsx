@@ -11,7 +11,7 @@ export default function WaveformTrack({ width, zoom, onRequestLoadAudio }: Wavef
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [waveformData, setWaveformData] = useState<number[]>([]);
   
-  const { audioBuffer, setAudioBuffer, setAudioFile, setPlayback, playback, seek } = useProjectStore();
+  const { audioBuffer, setAudioBuffer, setAudioFile, setPlayback, playback, seek, addMarker } = useProjectStore();
 
   // Generate waveform data from audio buffer
   useEffect(() => {
@@ -132,14 +132,25 @@ export default function WaveformTrack({ width, zoom, onRequestLoadAudio }: Wavef
     }
   }, [audioBuffer, zoom, seek, playback.duration, onRequestLoadAudio, handleLoadAudio]);
 
+  // Handle double-click - add marker at clicked position
+  const handleDoubleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!audioBuffer) return;
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const time = Math.max(0, Math.min(x / zoom, playback.duration));
+    addMarker(time);
+  }, [audioBuffer, zoom, playback.duration, addMarker]);
+
   return (
     <canvas
       ref={canvasRef}
       className="w-full h-full cursor-pointer"
       onClick={handleClick}
+      onDoubleClick={handleDoubleClick}
       onDrop={handleDrop}
       onDragOver={(e) => e.preventDefault()}
-      title={audioBuffer ? "Click to seek" : "Click to load audio or drop file here"}
+      title={audioBuffer ? "Click to seek • Double-click to add marker" : "Click to load audio or drop file here"}
     />
   );
 }
