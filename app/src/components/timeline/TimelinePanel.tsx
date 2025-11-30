@@ -1,0 +1,270 @@
+import { useRef, useCallback, useState } from 'react';
+import { useProjectStore } from '../../store';
+import WaveformTrack from './WaveformTrack';
+import ActorTrack from './ActorTrack';
+import PlaybackControls from './PlaybackControls';
+
+export default function TimelinePanel() {
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [editingActorId, setEditingActorId] = useState<string | null>(null);
+  const [editingLabel, setEditingLabel] = useState('');
+  
+  const { 
+    actors, 
+    playback, 
+    ui,
+    addActor,
+    removeActor,
+    updateActor,
+    setZoom,
+    seek,
+  } = useProjectStore();
+
+  const handleAddActor = () => {
+    const label = `Actor ${actors.length + 1}`;
+    addActor(label);
+  };
+
+  const handleZoomIn = () => {
+    setZoom(ui.zoom * 1.2);
+  };
+
+  const handleZoomOut = () => {
+    setZoom(ui.zoom / 1.2);
+  };
+
+  const handleTimelineClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    
+    // Only handle clicks directly on the timeline header (time ruler)
+    const target = e.target as HTMLElement;
+    if (!target.classList.contains('time-ruler')) return;
+    
+    const rect = target.getBoundingClientRect();
+    const x = e.clientX - rect.left + container.scrollLeft;
+    const time = x / ui.zoom;
+    seek(Math.max(0, Math.min(time, playback.duration)));
+  }, [ui.zoom, seek, playback.duration]);
+
+  const handleActorLabelDoubleClick = (actorId: string, currentLabel: string) => {
+    setEditingActorId(actorId);
+    setEditingLabel(currentLabel);
+  };
+
+  const handleLabelChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setEditingLabel(e.target.value);
+  };
+
+  const handleLabelSubmit = (actorId: string) => {
+    if (editingLabel.trim()) {
+      updateActor(actorId, { label: editingLabel.trim() });
+    }
+    setEditingActorId(null);
+  };
+
+  const handleLabelKeyDown = (e: React.KeyboardEvent, actorId: string) => {
+    if (e.key === 'Enter') {
+      handleLabelSubmit(actorId);
+    } else if (e.key === 'Escape') {
+      setEditingActorId(null);
+    }
+  };
+
+  const handleRemoveActor = (actorId: string) => {
+    if (confirm('Remove this actor? This cannot be undone.')) {
+      removeActor(actorId);
+    }
+  };
+
+  // Calculate timeline width based on duration
+  const timelineWidth = Math.max(playback.duration * ui.zoom, 1000);
+
+  // Generate time markers
+  const timeMarkers = [];
+  const markerInterval = getMarkerInterval(ui.zoom);
+  const maxTime = Math.max(playback.duration, timelineWidth / ui.zoom);
+  for (let t = 0; t <= maxTime; t += markerInterval) {
+    timeMarkers.push(t);
+  }
+
+  return (
+    <div className="h-full flex flex-col bg-[var(--color-bg-secondary)]">
+      {/* Timeline toolbar */}
+      <div className="h-10 flex items-center gap-2 px-4 border-b border-[var(--color-border)]">
+        <PlaybackControls />
+        
+        <div className="flex-1" />
+        
+        <button
+          onClick={handleAddActor}
+          className="px-3 py-1 rounded bg-[var(--color-bg-tertiary)] border border-[var(--color-border)]
+                     hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]
+                     transition-colors text-sm flex items-center gap-2"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          Add Actor
+        </button>
+
+        <div className="flex items-center gap-1 ml-4">
+          <button
+            onClick={handleZoomOut}
+            className="p-1 rounded hover:bg-[var(--color-bg-tertiary)] transition-colors"
+            title="Zoom Out"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM13 10H7" />
+            </svg>
+          </button>
+          <span className="text-xs text-[var(--color-text-secondary)] w-16 text-center">
+            {ui.zoom.toFixed(0)}px/s
+          </span>
+          <button
+            onClick={handleZoomIn}
+            className="p-1 rounded hover:bg-[var(--color-bg-tertiary)] transition-colors"
+            title="Zoom In"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Timeline content */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Track labels (fixed left column) */}
+        <div className="w-48 flex-shrink-0 border-r border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
+          {/* Time ruler label */}
+          <div className="h-8 border-b border-[var(--color-border)] flex items-center px-3">
+            <span className="text-xs text-[var(--color-text-secondary)]">Time</span>
+          </div>
+          
+          {/* Audio track label */}
+          <div className="h-16 border-b border-[var(--color-border)] flex items-center px-3">
+            <span className="text-sm">Audio</span>
+          </div>
+          
+          {/* Actor track labels */}
+          {actors.map((actor) => (
+            <div 
+              key={actor.id}
+              className="h-12 border-b border-[var(--color-border)] flex items-center px-3 group"
+            >
+              {editingActorId === actor.id ? (
+                <input
+                  type="text"
+                  value={editingLabel}
+                  onChange={handleLabelChange}
+                  onBlur={() => handleLabelSubmit(actor.id)}
+                  onKeyDown={(e) => handleLabelKeyDown(e, actor.id)}
+                  className="flex-1 bg-[var(--color-bg-tertiary)] px-2 py-1 rounded text-sm outline-none
+                             border border-[var(--color-accent)]"
+                  autoFocus
+                />
+              ) : (
+                <>
+                  <span 
+                    className="text-sm truncate flex-1 cursor-pointer hover:text-[var(--color-accent)]"
+                    onDoubleClick={() => handleActorLabelDoubleClick(actor.id, actor.label)}
+                    title="Double-click to rename"
+                  >
+                    {actor.label}
+                  </span>
+                  <button
+                    onClick={() => handleRemoveActor(actor.id)}
+                    className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-500 transition-all"
+                    title="Remove actor"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Scrollable timeline tracks */}
+        <div 
+          ref={scrollContainerRef}
+          className="flex-1 overflow-auto"
+          onClick={handleTimelineClick}
+        >
+          <div style={{ width: timelineWidth, minWidth: '100%' }}>
+            {/* Time ruler */}
+            <div className="h-8 border-b border-[var(--color-border)] relative time-ruler cursor-pointer">
+              {timeMarkers.map((t) => (
+                <div
+                  key={t}
+                  className="absolute top-0 h-full flex flex-col items-center"
+                  style={{ left: t * ui.zoom }}
+                >
+                  <div className="w-px h-2 bg-[var(--color-border)]" />
+                  <span className="text-xs text-[var(--color-text-secondary)] mt-1">
+                    {formatTime(t)}
+                  </span>
+                </div>
+              ))}
+              
+              {/* Playhead */}
+              <div 
+                className="absolute top-0 w-0.5 h-full bg-[var(--color-accent)] z-10"
+                style={{ left: playback.currentTime * ui.zoom }}
+              >
+                <div className="w-3 h-3 bg-[var(--color-accent)] -ml-[5px] -mt-1 rotate-45" />
+              </div>
+            </div>
+
+            {/* Waveform track */}
+            <div className="h-16 border-b border-[var(--color-border)] relative">
+              <WaveformTrack width={timelineWidth} zoom={ui.zoom} />
+              
+              {/* Playhead line */}
+              <div 
+                className="absolute top-0 w-0.5 h-full bg-[var(--color-accent)] z-10 pointer-events-none"
+                style={{ left: playback.currentTime * ui.zoom }}
+              />
+            </div>
+
+            {/* Actor tracks */}
+            {actors.map((actor) => (
+              <div 
+                key={actor.id}
+                className="h-12 border-b border-[var(--color-border)] relative"
+              >
+                <ActorTrack actor={actor} width={timelineWidth} zoom={ui.zoom} />
+                
+                {/* Playhead line */}
+                <div 
+                  className="absolute top-0 w-0.5 h-full bg-[var(--color-accent)] z-10 pointer-events-none"
+                  style={{ left: playback.currentTime * ui.zoom }}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Helper functions
+function formatTime(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  const ms = Math.floor((seconds % 1) * 10);
+  return `${mins}:${secs.toString().padStart(2, '0')}.${ms}`;
+}
+
+function getMarkerInterval(zoom: number): number {
+  // Adjust interval based on zoom level
+  if (zoom > 200) return 0.5;
+  if (zoom > 100) return 1;
+  if (zoom > 50) return 2;
+  if (zoom > 25) return 5;
+  return 10;
+}
