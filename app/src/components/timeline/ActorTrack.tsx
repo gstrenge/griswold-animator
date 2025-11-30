@@ -34,8 +34,19 @@ export default function ActorTrack({ actor, width, zoom }: ActorTrackProps) {
   });
   const [editingKeyframe, setEditingKeyframe] = useState<KeyFrame | null>(null);
   const [editValue, setEditValue] = useState<string>('');
+  const [hoverX, setHoverX] = useState<number | null>(null);
 
   const isSelected = ui.selectedActorId === actor.id;
+  const playheadX = playback.currentTime * zoom;
+  
+  // Check if hovering near the playhead (within 15px)
+  const ghostKeyframeThreshold = 15;
+  const isNearPlayhead = hoverX !== null && Math.abs(hoverX - playheadX) < ghostKeyframeThreshold;
+  
+  // Check if there's already a keyframe at the current time (within small tolerance)
+  const hasKeyframeAtPlayhead = actor.keyframes.some(
+    kf => Math.abs(kf.time - playback.currentTime) < 0.01
+  );
 
   // Handle double-click to add keyframe
   const handleDoubleClick = useCallback((e: React.MouseEvent) => {
@@ -52,11 +63,35 @@ export default function ActorTrack({ actor, width, zoom }: ActorTrackProps) {
     addKeyframe(actor.id, { time, value: newValue });
   }, [actor, zoom, addKeyframe, editingKeyframe]);
 
-  // Handle click to select
+  // Handle click to seek and select
   const handleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const time = Math.max(0, x / zoom);
+    seek(time);
     selectActor(actor.id);
-  }, [actor.id, selectActor]);
+  }, [actor.id, selectActor, seek, zoom]);
+
+  // Handle mouse move to track hover position
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    setHoverX(x);
+  }, []);
+
+  // Handle mouse leave
+  const handleMouseLeave = useCallback(() => {
+    setHoverX(null);
+  }, []);
+
+  // Handle ghost keyframe click to add keyframe at playhead
+  const handleGhostKeyframeClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    const currentValue = getActorValueAtTime(actor, playback.currentTime);
+    const newValue = currentValue > 0.5 ? 0 : 1;
+    addKeyframe(actor.id, { time: playback.currentTime, value: newValue });
+  }, [actor, playback.currentTime, addKeyframe]);
 
   // Handle keyframe mouse down for dragging
   const handleKeyframeMouseDown = useCallback((e: React.MouseEvent, keyframe: KeyFrame) => {
@@ -216,10 +251,39 @@ export default function ActorTrack({ actor, width, zoom }: ActorTrackProps) {
       }`}
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
       style={{ cursor: dragState.isDragging ? 'grabbing' : 'pointer' }}
     >
       {/* Value curve */}
       {renderValueCurve()}
+
+      {/* Ghost keyframe marker - shows when hovering near playhead and no keyframe exists there */}
+      {isNearPlayhead && !hasKeyframeAtPlayhead && !dragState.isDragging && !editingKeyframe && (
+        <div
+          className="absolute top-1/2 -translate-y-1/2 cursor-pointer z-10
+                     hover:scale-110 transition-all"
+          style={{
+            left: playheadX - 8,
+            width: 16,
+            height: 16,
+          }}
+          onClick={handleGhostKeyframeClick}
+          title="Click to add keyframe here"
+        >
+          <div
+            className="w-4 h-4 rounded-full animate-pulse"
+            style={{
+              backgroundColor: 'rgba(255, 107, 53, 0.4)',
+              border: '2px dashed rgba(255, 107, 53, 0.7)',
+              boxShadow: '0 0 8px rgba(255, 107, 53, 0.3)',
+            }}
+          />
+          <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[9px] text-[var(--color-accent)] whitespace-nowrap opacity-80">
+            + Add
+          </div>
+        </div>
+      )}
 
       {/* Keyframe markers */}
       {actor.keyframes.map((kf, index) => (
@@ -288,10 +352,10 @@ export default function ActorTrack({ actor, width, zoom }: ActorTrackProps) {
       )}
 
       {/* Empty state message */}
-      {actor.keyframes.length === 0 && (
+      {actor.keyframes.length === 0 && !isNearPlayhead && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <span className="text-xs text-[var(--color-text-secondary)] opacity-50">
-            Double-click to add keyframes
+            Click to seek • Hover near playhead to add keyframe
           </span>
         </div>
       )}
