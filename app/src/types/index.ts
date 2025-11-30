@@ -104,6 +104,7 @@ export interface UIState {
   scrollX: number;
   scrollY: number;
   tool: 'select' | 'rectangle' | 'polygon';
+  backgroundOpacity: number;  // 0-1, controls opacity of all background images
 }
 
 // ============================================================================

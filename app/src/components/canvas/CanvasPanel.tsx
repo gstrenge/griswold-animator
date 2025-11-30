@@ -58,6 +58,7 @@ export default function CanvasPanel() {
     selectBackground,
     setTool,
     setActorShape,
+    setUI,
   } = useProjectStore();
 
   // Preload background images
@@ -125,23 +126,27 @@ export default function CanvasPanel() {
       ctx.stroke();
     }
 
-    // Draw backgrounds (sorted by zIndex)
+    // Draw backgrounds (sorted by zIndex) with opacity
+    ctx.globalAlpha = ui.backgroundOpacity;
     const sortedBackgrounds = [...backgrounds].sort((a, b) => a.zIndex - b.zIndex);
     for (const bg of sortedBackgrounds) {
       const img = imageCache.current.get(bg.id);
       if (img && img.complete) {
         ctx.drawImage(img, bg.x, bg.y, bg.width, bg.height);
         
-        // Draw selection border
+        // Draw selection border (at full opacity)
         if (ui.selectedBackgroundId === bg.id) {
+          ctx.globalAlpha = 1;
           ctx.strokeStyle = '#ff6b35';
           ctx.lineWidth = 3;
           ctx.setLineDash([5, 5]);
           ctx.strokeRect(bg.x, bg.y, bg.width, bg.height);
           ctx.setLineDash([]);
+          ctx.globalAlpha = ui.backgroundOpacity;
         }
       }
     }
+    ctx.globalAlpha = 1; // Reset to full opacity for other elements
 
     // Draw actor shapes
     for (const actor of actors) {
@@ -217,7 +222,7 @@ export default function CanvasPanel() {
         ctx.stroke();
       }
     }
-  }, [project.canvasSize, backgrounds, actors, playback.currentTime, ui.selectedActorId, ui.selectedBackgroundId, ui.tool, drawingState]);
+  }, [project.canvasSize, backgrounds, actors, playback.currentTime, ui.selectedActorId, ui.selectedBackgroundId, ui.backgroundOpacity, ui.tool, drawingState]);
 
   // Redraw on state changes
   useEffect(() => {
@@ -668,6 +673,27 @@ export default function CanvasPanel() {
         >
           100%
         </button>
+
+        <div className="w-px h-6 bg-[var(--color-border)] mx-2" />
+
+        {/* Background opacity slider */}
+        <div className="flex items-center gap-2" title="Background image opacity">
+          <svg className="w-4 h-4 text-[var(--color-text-secondary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            value={ui.backgroundOpacity}
+            onChange={(e) => setUI({ backgroundOpacity: parseFloat(e.target.value) })}
+            className="w-20 h-1 accent-[var(--color-accent)] cursor-pointer"
+          />
+          <span className="text-xs text-[var(--color-text-secondary)] w-8">
+            {Math.round(ui.backgroundOpacity * 100)}%
+          </span>
+        </div>
 
         <div className="flex-1" />
 

@@ -98,6 +98,7 @@ const initialUI: UIState = {
   scrollX: 0,
   scrollY: 0,
   tool: 'select',
+  backgroundOpacity: 1, // Full opacity by default
 };
 
 const initialState: ProjectState = {
