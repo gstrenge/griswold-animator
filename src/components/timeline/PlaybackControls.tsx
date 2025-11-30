@@ -1,11 +1,13 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef } from 'react';
 import { useProjectStore } from '../../store';
 
 export default function PlaybackControls() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
-  const startTimeRef = useRef<number>(0);
   const animationFrameRef = useRef<number>(0);
+  const startWallTimeRef = useRef<number>(0);
+  const startPlaybackTimeRef = useRef<number>(0);
+  const isPlayingRef = useRef<boolean>(false);
 
   const { 
     playback, 
@@ -16,46 +18,68 @@ export default function PlaybackControls() {
     setPlayback,
   } = useProjectStore();
 
-  // Update current time during playback
-  const updateTime = useCallback(() => {
-    if (!audioContextRef.current || !playback.isPlaying) return;
+  // Keep refs in sync with state
+  isPlayingRef.current = playback.isPlaying;
+
+  // Animation loop - uses refs to avoid stale closures
+  const updateTime = () => {
+    if (!isPlayingRef.current) return;
     
-    const elapsed = audioContextRef.current.currentTime - startTimeRef.current;
-    const newTime = Math.min(elapsed, playback.duration);
+    // Use performance.now() for accurate wall-clock timing
+    const elapsedWallTime = (performance.now() - startWallTimeRef.current) / 1000;
+    const newTime = startPlaybackTimeRef.current + elapsedWallTime;
     
-    setPlayback({ currentTime: newTime });
+    // Get duration from store directly to avoid stale closure
+    const { duration } = useProjectStore.getState().playback;
+    const clampedTime = Math.min(newTime, duration);
     
-    if (newTime >= playback.duration) {
+    setPlayback({ currentTime: clampedTime });
+    
+    if (clampedTime >= duration) {
       pause();
       return;
     }
     
     animationFrameRef.current = requestAnimationFrame(updateTime);
-  }, [playback.isPlaying, playback.duration, setPlayback, pause]);
+  };
 
-  // Handle play/pause
+  // Handle play/pause - only depends on isPlaying and audioBuffer
   useEffect(() => {
     if (!audioBuffer) return;
 
     if (playback.isPlaying) {
-      // Start playback
-      audioContextRef.current = new AudioContext();
+      // Capture the current time at the moment play is pressed
+      const currentTime = useProjectStore.getState().playback.currentTime;
+      startPlaybackTimeRef.current = currentTime;
+      startWallTimeRef.current = performance.now();
+      
+      // Create or reuse AudioContext
+      if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
+        audioContextRef.current = new AudioContext();
+      }
+      
+      // Resume if suspended
+      if (audioContextRef.current.state === 'suspended') {
+        audioContextRef.current.resume();
+      }
+      
+      // Create and start audio source
       sourceNodeRef.current = audioContextRef.current.createBufferSource();
       sourceNodeRef.current.buffer = audioBuffer;
       sourceNodeRef.current.connect(audioContextRef.current.destination);
+      sourceNodeRef.current.start(0, currentTime);
       
-      startTimeRef.current = audioContextRef.current.currentTime - playback.currentTime;
-      sourceNodeRef.current.start(0, playback.currentTime);
-      
+      // Start animation loop
       animationFrameRef.current = requestAnimationFrame(updateTime);
     } else {
       // Stop playback
       if (sourceNodeRef.current) {
         try {
           sourceNodeRef.current.stop();
-        } catch (e) {
+        } catch {
           // Ignore - already stopped
         }
+        sourceNodeRef.current.disconnect();
         sourceNodeRef.current = null;
       }
       cancelAnimationFrame(animationFrameRef.current);
@@ -65,13 +89,25 @@ export default function PlaybackControls() {
       if (sourceNodeRef.current) {
         try {
           sourceNodeRef.current.stop();
-        } catch (e) {
+        } catch {
           // Ignore
         }
+        sourceNodeRef.current.disconnect();
+        sourceNodeRef.current = null;
       }
       cancelAnimationFrame(animationFrameRef.current);
     };
-  }, [playback.isPlaying, audioBuffer, playback.currentTime, updateTime]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playback.isPlaying, audioBuffer]);
+  
+  // Cleanup AudioContext on unmount
+  useEffect(() => {
+    return () => {
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close();
+      }
+    };
+  }, []);
 
   const handlePlayPause = () => {
     if (playback.isPlaying) {
