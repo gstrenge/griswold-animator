@@ -41,35 +41,50 @@ export default function Toolbar({ onHome }: ToolbarProps) {
     const cues: ExportedCue[] = [];
     const duration = playback.duration || 0;
     
-    if (duration === 0) {
-      // No audio loaded, generate cues from keyframes only
-      for (const actor of actors) {
-        // Add initial state
+    for (const actor of actors) {
+      if (actor.interpolation === 'step') {
+        // Step interpolation: only export keyframe times (value holds until next keyframe)
+        // Add initial state at t=0
         cues.push({
           t: 0,
           id: actor.label,
           state: getActorValueAtTime(actor, 0),
         });
         
-        // Add keyframe states
+        // Add each keyframe
         for (const kf of actor.keyframes) {
           cues.push({
-            t: kf.time,
+            t: Math.round(kf.time * 1000) / 1000,
             id: actor.label,
             state: kf.value,
           });
         }
-      }
-    } else {
-      // Generate cues at regular intervals based on tick rate
-      for (let t = 0; t <= duration; t += tickRate) {
-        for (const actor of actors) {
-          const value = getActorValueAtTime(actor, t);
+      } else {
+        // Linear interpolation: need to generate values at tick rate intervals
+        if (duration === 0) {
+          // No audio - just export keyframes
           cues.push({
-            t: Math.round(t * 1000) / 1000, // Round to avoid floating point issues
+            t: 0,
             id: actor.label,
-            state: Math.round(value * 1000) / 1000,
+            state: getActorValueAtTime(actor, 0),
           });
+          for (const kf of actor.keyframes) {
+            cues.push({
+              t: Math.round(kf.time * 1000) / 1000,
+              id: actor.label,
+              state: kf.value,
+            });
+          }
+        } else {
+          // Generate at tick rate for smooth interpolation
+          for (let t = 0; t <= duration; t += tickRate) {
+            const value = getActorValueAtTime(actor, t);
+            cues.push({
+              t: Math.round(t * 1000) / 1000,
+              id: actor.label,
+              state: Math.round(value * 1000) / 1000,
+            });
+          }
         }
       }
     }
@@ -78,6 +93,28 @@ export default function Toolbar({ onHome }: ToolbarProps) {
     cues.sort((a, b) => a.t - b.t || a.id.localeCompare(b.id));
     
     return cues;
+  };
+
+  // Calculate estimated cue count for the modal
+  const getEstimatedCueCount = (): number => {
+    const duration = playback.duration || 0;
+    let count = 0;
+    
+    for (const actor of actors) {
+      if (actor.interpolation === 'step') {
+        // Step: 1 initial + number of keyframes
+        count += 1 + actor.keyframes.length;
+      } else {
+        // Linear: ticks over duration (or keyframes if no duration)
+        if (duration === 0) {
+          count += 1 + actor.keyframes.length;
+        } else {
+          count += Math.ceil(duration / tickRate) + 1;
+        }
+      }
+    }
+    
+    return count;
   };
 
   const handleDownloadCues = () => {
@@ -195,9 +232,13 @@ export default function Toolbar({ onHome }: ToolbarProps) {
 
             <div className="mb-4 p-3 bg-[var(--color-bg-tertiary)] rounded">
               <p className="text-sm text-[var(--color-text-secondary)]">
-                <strong>Actors:</strong> {actors.length}<br />
+                <strong>Actors:</strong> {actors.length} 
+                ({actors.filter(a => a.interpolation === 'step').length} step, {actors.filter(a => a.interpolation === 'linear').length} linear)<br />
                 <strong>Duration:</strong> {playback.duration.toFixed(2)}s<br />
-                <strong>Estimated cues:</strong> ~{Math.ceil((playback.duration || 1) / tickRate) * actors.length}
+                <strong>Estimated cues:</strong> ~{getEstimatedCueCount()}
+              </p>
+              <p className="text-xs text-[var(--color-text-secondary)] mt-2 opacity-70">
+                Step actors export only keyframes. Linear actors export at tick rate.
               </p>
             </div>
             
