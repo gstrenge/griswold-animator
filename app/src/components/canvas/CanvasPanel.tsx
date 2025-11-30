@@ -11,6 +11,15 @@ interface DrawingState {
   polygonPoints: [number, number][];
 }
 
+interface ViewState {
+  zoom: number;
+  panX: number;
+  panY: number;
+  isPanning: boolean;
+  panStartX: number;
+  panStartY: number;
+}
+
 export default function CanvasPanel() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -25,8 +34,18 @@ export default function CanvasPanel() {
     polygonPoints: [],
   });
 
+  const [viewState, setViewState] = useState<ViewState>({
+    zoom: 1,
+    panX: 0,
+    panY: 0,
+    isPanning: false,
+    panStartX: 0,
+    panStartY: 0,
+  });
+
   const [showActorAssignModal, setShowActorAssignModal] = useState(false);
   const [pendingShape, setPendingShape] = useState<Polygon | null>(null);
+  const [ctrlPressed, setCtrlPressed] = useState(false);
   
   const { 
     project, 
@@ -55,19 +74,25 @@ export default function CanvasPanel() {
     });
   }, [backgrounds]);
 
-  // Get canvas coordinates from mouse event
+  // Get canvas coordinates from mouse event (accounting for zoom and pan)
   const getCanvasCoords = useCallback((e: React.MouseEvent): { x: number; y: number } => {
-    const canvas = canvasRef.current;
-    if (!canvas) return { x: 0, y: 0 };
+    const container = containerRef.current;
+    if (!container) return { x: 0, y: 0 };
 
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    return {
-      x: (e.clientX - rect.left) * scaleX,
-      y: (e.clientY - rect.top) * scaleY,
-    };
-  }, []);
+    const rect = container.getBoundingClientRect();
+    const containerCenterX = rect.width / 2;
+    const containerCenterY = rect.height / 2;
+    
+    // Mouse position relative to container center
+    const mouseX = e.clientX - rect.left - containerCenterX;
+    const mouseY = e.clientY - rect.top - containerCenterY;
+    
+    // Convert to canvas coordinates
+    const canvasX = (mouseX - viewState.panX) / viewState.zoom + project.canvasSize.width / 2;
+    const canvasY = (mouseY - viewState.panY) / viewState.zoom + project.canvasSize.height / 2;
+    
+    return { x: canvasX, y: canvasY };
+  }, [viewState.zoom, viewState.panX, viewState.panY, project.canvasSize]);
 
   // Draw the canvas
   const draw = useCallback(() => {
@@ -224,8 +249,98 @@ export default function CanvasPanel() {
     e.preventDefault();
   };
 
+  // Zoom functions
+  const handleZoomIn = () => {
+    setViewState(prev => ({
+      ...prev,
+      zoom: Math.min(prev.zoom * 1.25, 5),
+    }));
+  };
+
+  const handleZoomOut = () => {
+    setViewState(prev => ({
+      ...prev,
+      zoom: Math.max(prev.zoom / 1.25, 0.1),
+    }));
+  };
+
+  const handleFitToView = () => {
+    const container = containerRef.current;
+    if (!container) return;
+    
+    const containerRect = container.getBoundingClientRect();
+    const padding = 40;
+    const availableWidth = containerRect.width - padding * 2;
+    const availableHeight = containerRect.height - padding * 2;
+    
+    const scaleX = availableWidth / project.canvasSize.width;
+    const scaleY = availableHeight / project.canvasSize.height;
+    const zoom = Math.min(scaleX, scaleY, 1); // Don't zoom in past 100%
+    
+    setViewState({
+      zoom,
+      panX: 0,
+      panY: 0,
+      isPanning: false,
+      panStartX: 0,
+      panStartY: 0,
+    });
+  };
+
+  const handleResetZoom = () => {
+    setViewState({
+      zoom: 1,
+      panX: 0,
+      panY: 0,
+      isPanning: false,
+      panStartX: 0,
+      panStartY: 0,
+    });
+  };
+
+  // Handle mouse wheel for zooming
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    const newZoom = Math.min(Math.max(viewState.zoom * delta, 0.1), 5);
+    
+    // Zoom toward mouse position
+    const container = containerRef.current;
+    if (container) {
+      const rect = container.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left - rect.width / 2;
+      const mouseY = e.clientY - rect.top - rect.height / 2;
+      
+      const zoomRatio = newZoom / viewState.zoom;
+      const newPanX = mouseX - (mouseX - viewState.panX) * zoomRatio;
+      const newPanY = mouseY - (mouseY - viewState.panY) * zoomRatio;
+      
+      setViewState(prev => ({
+        ...prev,
+        zoom: newZoom,
+        panX: newPanX,
+        panY: newPanY,
+      }));
+    }
+  }, [viewState.zoom, viewState.panX, viewState.panY]);
+
   // Handle mouse down
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    // Middle mouse button or ctrl+left click for panning
+    if (e.button === 1 || (ctrlPressed && e.button === 0)) {
+      e.preventDefault();
+      setViewState(prev => ({
+        ...prev,
+        isPanning: true,
+        panStartX: e.clientX - prev.panX,
+        panStartY: e.clientY - prev.panY,
+      }));
+      return;
+    }
+
+    if (e.button !== 0) return;
+    
     const { x, y } = getCanvasCoords(e);
 
     if (ui.tool === 'rectangle') {
@@ -238,10 +353,20 @@ export default function CanvasPanel() {
         polygonPoints: [],
       });
     }
-  }, [ui.tool, getCanvasCoords]);
+  }, [ui.tool, getCanvasCoords, ctrlPressed]);
 
   // Handle mouse move
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    // Handle panning
+    if (viewState.isPanning) {
+      setViewState(prev => ({
+        ...prev,
+        panX: e.clientX - prev.panStartX,
+        panY: e.clientY - prev.panStartY,
+      }));
+      return;
+    }
+
     const { x, y } = getCanvasCoords(e);
 
     if (drawingState.isDrawing && ui.tool === 'rectangle') {
@@ -257,10 +382,19 @@ export default function CanvasPanel() {
         currentY: y,
       }));
     }
-  }, [drawingState.isDrawing, drawingState.polygonPoints.length, ui.tool, getCanvasCoords]);
+  }, [viewState.isPanning, drawingState.isDrawing, drawingState.polygonPoints.length, ui.tool, getCanvasCoords]);
 
   // Handle mouse up
   const handleMouseUp = useCallback((e: React.MouseEvent) => {
+    // Stop panning
+    if (viewState.isPanning) {
+      setViewState(prev => ({
+        ...prev,
+        isPanning: false,
+      }));
+      return;
+    }
+
     if (drawingState.isDrawing && ui.tool === 'rectangle') {
       const { x, y } = getCanvasCoords(e);
       const rectX = Math.min(drawingState.startX, x);
@@ -289,10 +423,13 @@ export default function CanvasPanel() {
         polygonPoints: [],
       });
     }
-  }, [drawingState, ui.tool, getCanvasCoords]);
+  }, [viewState.isPanning, drawingState, ui.tool, getCanvasCoords]);
 
   // Handle canvas click
   const handleCanvasClick = useCallback((e: React.MouseEvent) => {
+    // Don't handle click if we were panning
+    if (viewState.isPanning) return;
+    
     const { x, y } = getCanvasCoords(e);
 
     if (ui.tool === 'polygon') {
@@ -302,7 +439,7 @@ export default function CanvasPanel() {
         const distance = Math.sqrt(
           Math.pow(x - firstPoint[0], 2) + Math.pow(y - firstPoint[1], 2)
         );
-        if (distance < 15) {
+        if (distance < 15 / viewState.zoom) { // Adjust for zoom
           // Close the polygon
           const polygon: ArbitraryPolygon = {
             type: 'polygon',
@@ -354,7 +491,7 @@ export default function CanvasPanel() {
       selectActor(null);
       selectBackground(null);
     }
-  }, [ui.tool, actors, backgrounds, selectActor, selectBackground, drawingState.polygonPoints, getCanvasCoords]);
+  }, [ui.tool, actors, backgrounds, selectActor, selectBackground, drawingState.polygonPoints, getCanvasCoords, viewState.isPanning, viewState.zoom]);
 
   // Handle double-click to finish polygon
   const handleDoubleClick = useCallback(() => {
@@ -397,7 +534,7 @@ export default function CanvasPanel() {
     setShowActorAssignModal(false);
   };
 
-  // Handle escape key to cancel drawing
+  // Handle keyboard events for panning and escape
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -412,16 +549,38 @@ export default function CanvasPanel() {
         setPendingShape(null);
         setShowActorAssignModal(false);
       }
+      if (e.key === 'Control' && !e.repeat) {
+        setCtrlPressed(true);
+      }
     };
+    
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Control') {
+        setCtrlPressed(false);
+        setViewState(prev => ({ ...prev, isPanning: false }));
+      }
+    };
+    
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
   }, []);
+
+  // Determine cursor
+  const getCursor = () => {
+    if (viewState.isPanning || ctrlPressed) return 'grab';
+    if (ui.tool === 'select') return 'default';
+    return 'crosshair';
+  };
 
   return (
     <div className="h-full flex flex-col relative">
       {/* Canvas toolbar */}
       <div className="h-10 flex items-center gap-2 px-4 bg-[var(--color-bg-secondary)] border-b border-[var(--color-border)]">
-        <span className="text-[var(--color-text-secondary)] text-sm mr-4">Tools:</span>
+        <span className="text-[var(--color-text-secondary)] text-sm mr-2">Tools:</span>
         
         <button
           onClick={() => setTool('select')}
@@ -465,6 +624,51 @@ export default function CanvasPanel() {
           </svg>
         </button>
 
+        <div className="w-px h-6 bg-[var(--color-border)] mx-2" />
+
+        {/* Zoom controls */}
+        <button
+          onClick={handleZoomOut}
+          className="p-2 rounded hover:bg-[var(--color-bg-tertiary)] transition-colors"
+          title="Zoom Out (-)"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM13 10H7" />
+          </svg>
+        </button>
+        
+        <span className="text-xs text-[var(--color-text-secondary)] w-14 text-center">
+          {Math.round(viewState.zoom * 100)}%
+        </span>
+        
+        <button
+          onClick={handleZoomIn}
+          className="p-2 rounded hover:bg-[var(--color-bg-tertiary)] transition-colors"
+          title="Zoom In (+)"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7" />
+          </svg>
+        </button>
+
+        <button
+          onClick={handleFitToView}
+          className="p-2 rounded hover:bg-[var(--color-bg-tertiary)] transition-colors"
+          title="Fit to View"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+          </svg>
+        </button>
+
+        <button
+          onClick={handleResetZoom}
+          className="px-2 py-1 rounded hover:bg-[var(--color-bg-tertiary)] transition-colors text-xs"
+          title="Reset to 100%"
+        >
+          100%
+        </button>
+
         <div className="flex-1" />
 
         <span className="text-[var(--color-text-secondary)] text-xs">
@@ -473,28 +677,33 @@ export default function CanvasPanel() {
         
         <span className="text-[var(--color-text-secondary)] text-xs ml-4">
           {ui.tool === 'polygon' && drawingState.polygonPoints.length > 0 
-            ? `Drawing polygon (${drawingState.polygonPoints.length} points) - Click near first point or double-click to finish`
-            : 'Drop images to add backgrounds'}
+            ? `Drawing polygon (${drawingState.polygonPoints.length} points)`
+            : ctrlPressed ? 'Pan mode (release Ctrl)' : 'Scroll to zoom • Ctrl+drag to pan'}
         </span>
       </div>
 
       {/* Canvas container */}
       <div 
         ref={containerRef}
-        className="flex-1 overflow-auto flex items-center justify-center bg-[var(--color-bg-primary)] p-4"
+        className="flex-1 overflow-hidden flex items-center justify-center bg-[var(--color-bg-primary)]"
         onDrop={handleDrop}
         onDragOver={handleDragOver}
+        onWheel={handleWheel}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={() => setViewState(prev => ({ ...prev, isPanning: false }))}
+        style={{ cursor: getCursor() }}
       >
         <canvas
           ref={canvasRef}
           onClick={handleCanvasClick}
           onDoubleClick={handleDoubleClick}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          className="max-w-full max-h-full object-contain shadow-2xl"
+          className="shadow-2xl"
           style={{
-            cursor: ui.tool === 'select' ? 'default' : 'crosshair',
+            transform: `translate(${viewState.panX}px, ${viewState.panY}px) scale(${viewState.zoom})`,
+            transformOrigin: 'center center',
+            imageRendering: viewState.zoom > 1 ? 'pixelated' : 'auto',
           }}
         />
       </div>
