@@ -22,6 +22,7 @@ export default function ActorTrack({ actor, width, zoom }: ActorTrackProps) {
     addKeyframe, 
     removeKeyframe,
     playback,
+    seek,
   } = useProjectStore();
 
   const trackRef = useRef<HTMLDivElement>(null);
@@ -107,8 +108,15 @@ export default function ActorTrack({ actor, width, zoom }: ActorTrackProps) {
     };
   }, [dragState.isDragging, dragState.startX, dragState.originalTime, dragState.keyframeTime, zoom, playback.duration, actor.id, actor.keyframes, removeKeyframe, addKeyframe]);
 
-  // Handle keyframe click for editing value
+  // Handle keyframe click to snap playhead to keyframe time
   const handleKeyframeClick = useCallback((e: React.MouseEvent, keyframe: KeyFrame) => {
+    e.stopPropagation();
+    seek(keyframe.time);
+    selectActor(actor.id);
+  }, [seek, selectActor, actor.id]);
+
+  // Handle keyframe double-click to edit value
+  const handleKeyframeDoubleClick = useCallback((e: React.MouseEvent, keyframe: KeyFrame) => {
     e.stopPropagation();
     setEditingKeyframe(keyframe);
     setEditValue(keyframe.value.toFixed(2));
@@ -228,8 +236,9 @@ export default function ActorTrack({ actor, width, zoom }: ActorTrackProps) {
           }}
           onMouseDown={(e) => handleKeyframeMouseDown(e, kf)}
           onClick={(e) => handleKeyframeClick(e, kf)}
+          onDoubleClick={(e) => handleKeyframeDoubleClick(e, kf)}
           onContextMenu={(e) => handleKeyframeContextMenu(e, kf)}
-          title={`Time: ${kf.time.toFixed(2)}s\nValue: ${kf.value.toFixed(2)}\nDrag to move • Click to edit • Right-click to delete`}
+          title={`Time: ${kf.time.toFixed(2)}s\nValue: ${kf.value.toFixed(2)}\nClick to snap • Double-click to edit • Drag to move • Right-click to delete`}
         >
           <div
             className="w-4 h-4 rounded-full"
